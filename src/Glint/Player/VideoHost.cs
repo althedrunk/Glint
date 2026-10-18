@@ -58,6 +58,38 @@ public sealed partial class VideoHost : IDisposable
 
     public void Hide() => SetBounds(_bounds.X, _bounds.Y, _bounds.W, _bounds.H, false);
 
+    string _cutoutKey = "";
+
+    // XAML popups (menus, flyouts, tooltips) draw underneath this native window, so punch holes in it where
+    // they are rather than hiding the whole video. Rects are in the parent's client pixels.
+    public void SetCutouts(IReadOnlyList<(int X, int Y, int W, int H)> popups)
+    {
+        var local = new List<(int X, int Y, int W, int H)>();
+        if (_visible)
+            foreach (var p in popups)
+            {
+                int x1 = Math.Max(p.X, _bounds.X), y1 = Math.Max(p.Y, _bounds.Y);
+                int x2 = Math.Min(p.X + p.W, _bounds.X + _bounds.W), y2 = Math.Min(p.Y + p.H, _bounds.Y + _bounds.H);
+                if (x2 > x1 && y2 > y1) local.Add((x1 - _bounds.X, y1 - _bounds.Y, x2 - x1, y2 - y1));
+            }
+        var key = local.Count == 0 ? "" : $"{_bounds.W}x{_bounds.H}:" + string.Join(";", local);
+        if (key == _cutoutKey) return;
+        _cutoutKey = key;
+        if (local.Count == 0)
+        {
+            SetWindowRgn(Hwnd, IntPtr.Zero, true);
+            return;
+        }
+        var region = CreateRectRgn(0, 0, _bounds.W, _bounds.H);
+        foreach (var r in local)
+        {
+            var hole = CreateRectRgn(r.X, r.Y, r.X + r.W, r.Y + r.H);
+            CombineRgn(region, region, hole, 4); // RGN_DIFF
+            DeleteObject(hole);
+        }
+        SetWindowRgn(Hwnd, region, true); // the window owns the region from here
+    }
+
     // Re-asserts z-order above the XAML island without moving.
     public void BringToTop()
     {
@@ -75,7 +107,6 @@ public sealed partial class VideoHost : IDisposable
                 case 0x0201: host.Input?.Invoke("click"); break;
                 case 0x0203: host.Input?.Invoke("dblclick"); return IntPtr.Zero;
                 case 0x020A:
-                    host.Input?.Invoke((short)(wParam.ToInt64() >> 16) > 0 ? "wheel 1" : "wheel -1");
                     return IntPtr.Zero;
             }
         }
@@ -104,6 +135,11 @@ public sealed partial class VideoHost : IDisposable
         public string lpszClassName;
         public IntPtr hIconSm;
     }
+
+    [DllImport("gdi32.dll")] static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] static extern int CombineRgn(IntPtr dest, IntPtr a, IntPtr b, int mode);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr handle);
+    [DllImport("user32.dll")] static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, bool redraw);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern ushort RegisterClassExW(ref WNDCLASSEXW wc);

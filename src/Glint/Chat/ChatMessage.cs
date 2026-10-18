@@ -25,8 +25,19 @@ public sealed class ChatMessage
     public string? SystemText { get; init; }
     public string? ReplyName { get; init; }
     public string? ReplyBody { get; init; }
-    public bool Highlighted { get; init; }
+    public string? ReplyParentId { get; init; }
+    // ID of the first message in the reply thread (Twitch threads are one level deep).
+    public string? ThreadId { get; init; }
+    public HighlightKind Highlight { get; init; }
+    public bool Highlighted => Highlight != HighlightKind.None;
     public bool FirstMessage { get; init; }
+    public bool ChannelPointsHighlight { get; init; }
+    // USERNOTICE msg-id (sub, raid, announcement, ...) and an announcement's colour.
+    public string? NoticeId { get; init; }
+    public string? AnnouncementColor { get; init; }
+    // Channel login it was sent in; ChannelLabel is shown in front of it in the mentions list.
+    public string? Channel { get; set; }
+    public string? ChannelLabel { get; set; }
     public DateTimeOffset Time { get; init; } = DateTimeOffset.Now;
     // Set for VOD replay messages: where in the video it was sent.
     public TimeSpan? ReplayOffset { get; init; }
@@ -42,6 +53,14 @@ public sealed class ChatMessage
         EmoteFragment e => e.Emote.Name,
         _ => "",
     }));
+
+    // A copy for a second view (thread, mentions) so the two don't fight over the layout cache.
+    public ChatMessage CopyForView()
+    {
+        var copy = (ChatMessage)MemberwiseClone();
+        copy.Layout = null;
+        return copy;
+    }
 
     public static ChatMessage System(string text) => new()
     {
@@ -96,8 +115,9 @@ public static class MessageBuilder
                 if (ch.FindBadge(b) is { } br) badges.Add(br);
         }
 
-        var fragments = text != null ? Tokenize(text, m.Tag("emotes"), ch) : new List<Fragment>();
-        var mention = text != null && IsMention(text, ch.SelfLogin);
+        var userId = m.Tag("user-id");
+        var fragments = text != null ? Tokenize(text, m.Tag("emotes"), ch, userId) : new List<Fragment>();
+        var highlight = Highlights.Check(login, text, ch.SelfLogin);
         ch.NoteChatter(display);
 
         var replyName = m.Tag("reply-parent-display-name");
@@ -115,7 +135,7 @@ public static class MessageBuilder
         return new ChatMessage
         {
             Id = m.Tag("id"),
-            UserId = m.Tag("user-id"),
+            UserId = userId,
             Login = login,
             DisplayName = display,
             NameColor = color,
@@ -125,19 +145,34 @@ public static class MessageBuilder
             SystemText = systemText,
             ReplyName = replyName.Length > 0 ? replyName : null,
             ReplyBody = replyBody.Length > 0 ? replyBody : null,
-            Highlighted = mention,
+            ReplyParentId = Null(m.Tag("reply-parent-msg-id")),
+            ThreadId = Null(m.Tag("reply-thread-parent-msg-id")),
+            Highlight = highlight,
             FirstMessage = m.Tag("first-msg") == "1",
+            ChannelPointsHighlight = m.Command == "PRIVMSG" && m.Tag("msg-id") == "highlighted-message",
+            NoticeId = m.Command == "USERNOTICE" ? Null(m.Tag("msg-id")) : null,
+            AnnouncementColor = Null(m.Tag("msg-param-color")),
+            Channel = ch.Login,
             Time = time,
         };
     }
 
-    public static ChatMessage Local(string text, ChatChannel ch, string login, string display, Color color, List<BadgeRef> badges) => new()
+    static string? Null(string s) => s.Length > 0 ? s : null;
+
+    public static ChatMessage Local(string text, ChatChannel ch, string login, string display, Color color, List<BadgeRef> badges, string? userId,
+        ChatMessage? replyTo = null) => new()
     {
+        UserId = userId,
+        Channel = ch.Login,
+        ReplyName = replyTo?.DisplayName,
+        ReplyBody = replyTo?.PlainText,
+        ReplyParentId = replyTo?.Id,
+        ThreadId = replyTo == null ? null : replyTo.ThreadId ?? replyTo.Id,
         Login = login,
         DisplayName = display,
         NameColor = color,
         Badges = badges,
-        Fragments = Tokenize(text.StartsWith("/me ") ? text[4..] : text, "", ch),
+        Fragments = Tokenize(StripReplyPrefix(text.StartsWith("/me ") ? text[4..] : text, replyTo), "", ch, userId),
         Kind = text.StartsWith("/me ") ? MessageKind.Action : MessageKind.Normal,
     };
 
@@ -147,7 +182,7 @@ public static class MessageBuilder
         foreach (var f in c.Fragments)
         {
             if (f.EmoteId != null) fragments.Add(new EmoteFragment(EmoteSources.Twitch(f.EmoteId, f.Text.Trim()), new List<EmoteInfo>()));
-            else AddWords(f.Text, ch, fragments);
+            else AddWords(f.Text, ch, fragments, null);
         }
         var badges = c.Badges.Select(ch.FindBadge).OfType<BadgeRef>().ToList();
         return new ChatMessage
@@ -162,22 +197,15 @@ public static class MessageBuilder
         };
     }
 
-    static bool IsMention(string text, string? self)
+    // Replies go out as "@name text"; the reply line already shows who it's to.
+    static string StripReplyPrefix(string text, ChatMessage? replyTo)
     {
-        if (string.IsNullOrEmpty(self)) return false;
-        int i = 0;
-        while ((i = text.IndexOf(self, i, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            bool startOk = i == 0 || !char.IsLetterOrDigit(text[i - 1]) && text[i - 1] != '_';
-            int end = i + self.Length;
-            bool endOk = end >= text.Length || !char.IsLetterOrDigit(text[end]) && text[end] != '_';
-            if (startOk && endOk) return true;
-            i = end;
-        }
-        return false;
+        if (replyTo == null) return text;
+        var prefix = "@" + replyTo.Login + " ";
+        return text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? text[prefix.Length..] : text;
     }
 
-    static List<Fragment> Tokenize(string text, string emotesTag, ChatChannel ch)
+    static List<Fragment> Tokenize(string text, string emotesTag, ChatChannel ch, string? userId)
     {
         // Twitch emote ranges are in Unicode code points; map them to UTF-16 indices.
         var twitch = new List<(int Start, int End, EmoteInfo Emote)>();
@@ -213,19 +241,20 @@ public static class MessageBuilder
         foreach (var (start, end, emote) in twitch)
         {
             if (start < pos) continue;
-            AddWords(text[pos..start], ch, result);
+            AddWords(text[pos..start], ch, result, userId);
             result.Add(new EmoteFragment(emote, new List<EmoteInfo>()));
             pos = end;
         }
-        AddWords(text[pos..], ch, result);
+        AddWords(text[pos..], ch, result, userId);
         return result;
     }
 
-    static void AddWords(string segment, ChatChannel ch, List<Fragment> into)
+    static void AddWords(string segment, ChatChannel ch, List<Fragment> into, string? userId)
     {
         foreach (var word in segment.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (ch.Emotes.Find(word) is { } emote)
+            // Channel emotes win; otherwise the sender's 7TV personal emotes.
+            if ((ch.Emotes.Find(word) ?? SevenTvCosmetics.PersonalEmote(userId, word)) is { } emote)
             {
                 if (emote.ZeroWidth && into.Count > 0 && into[^1] is EmoteFragment prev)
                     prev.Overlays.Add(emote);

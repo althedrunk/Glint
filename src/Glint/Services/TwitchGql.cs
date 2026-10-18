@@ -27,7 +27,10 @@ public static class TwitchGql
     const string Endpoint = "https://gql.twitch.tv/gql";
     public const string WebClientId = "kimne78kx3ncx6brgo4mv6wki5h1ko";
 
-    static async Task<JsonElement?> QueryAsync(string query, object? variables = null, CancellationToken ct = default)
+    internal static Task<JsonElement?> RawQueryAsync(string query, object? variables = null) => QueryAsync(query, variables);
+
+    // session: send the twitch.tv session if one is connected (playback tokens only).
+    static async Task<JsonElement?> QueryAsync(string query, object? variables = null, CancellationToken ct = default, bool session = false)
     {
         try
         {
@@ -36,7 +39,13 @@ public static class TwitchGql
                 Content = JsonContent.Create(new { query, variables }),
             };
             req.Headers.Add("Client-ID", WebClientId);
+            if (session) TwitchSession.Apply(req);
             using var resp = await Net.Http.SendAsync(req, ct);
+            if (session && req.Headers.Authorization != null && resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Log.Error("twitch.tv session rejected for playback, using anonymous playback");
+                return await QueryAsync(query, variables, ct, session: false);
+            }
             if (!resp.IsSuccessStatusCode)
             {
                 Log.Error($"GQL HTTP {(int)resp.StatusCode}");
@@ -147,7 +156,7 @@ public static class TwitchGql
                 params: { platform: "web", playerBackend: "mediaplayer", playerType: "site" }) { value signature }
             }
             """;
-        var data = await QueryAsync(q, new { id = videoId }, ct);
+        var data = await QueryAsync(q, new { id = videoId }, ct, session: true);
         var tok = data?.Obj("videoPlaybackAccessToken") ?? default;
         if (tok.Str("value") is not { } value || tok.Str("signature") is not { } sig) return new();
         var url = $"https://usher.ttvnw.net/vod/{videoId}.m3u8?sig={sig}&token={Uri.EscapeDataString(value)}" +
@@ -200,7 +209,7 @@ public static class TwitchGql
                 params: { platform: "web", playerBackend: "mediaplayer", playerType: $playerType }) { value signature }
             }
             """;
-        var data = await QueryAsync(q, new { login = login.ToLowerInvariant(), playerType }, ct);
+        var data = await QueryAsync(q, new { login = login.ToLowerInvariant(), playerType }, ct, session: true);
         var tok = data?.Obj("streamPlaybackAccessToken") ?? default;
         var value = tok.Str("value");
         var sig = tok.Str("signature");
@@ -249,8 +258,11 @@ public static class TwitchGql
             }
             else if (pending != null && line.Length > 0 && !line.StartsWith('#'))
             {
-                var group = pending.GetValueOrDefault("VIDEO", "");
-                var name = names.GetValueOrDefault(group, group);
+                // Older playlists name renditions via EXT-X-MEDIA groups, newer ones inline (IVS-NAME).
+                var group = pending.GetValueOrDefault("VIDEO", pending.GetValueOrDefault("STABLE-VARIANT-ID", ""));
+                var name = names.GetValueOrDefault(group) ?? pending.GetValueOrDefault("IVS-NAME", group);
+                bool isSource = group == "chunked" || pending.GetValueOrDefault("IVS-VARIANT-SOURCE") == "source";
+                if (isSource && !name.Contains("source", StringComparison.OrdinalIgnoreCase)) name += " (source)";
                 if (group == "audio_only") name = "Audio only";
                 int.TryParse(pending.GetValueOrDefault("BANDWIDTH", "0"), out var bw);
                 int width = 0, height = 0;
@@ -261,7 +273,7 @@ public static class TwitchGql
                           : codecs.StartsWith("av01") ? "AV1" : "H.264";
                 // Dual-format streams also carry a vertical copy for phones; not useful here.
                 if (height <= width || group == "audio_only")
-                    variants.Add(new StreamVariant(name, line, bw, group == "chunked", height, codec));
+                    variants.Add(new StreamVariant(name, line, bw, isSource, height, codec));
                 pending = null;
             }
         }

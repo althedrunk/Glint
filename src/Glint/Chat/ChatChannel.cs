@@ -18,6 +18,8 @@ public sealed class ChatChannel
     public string? SelfLogin { get; set; }
 
     readonly ConcurrentQueue<object> _incoming = new();
+    readonly object _historyLock = new();
+    readonly List<UserHistory> _userHistories = new();
     readonly List<IrcMessage> _beforeReady = new();
     readonly HashSet<string> _chatters = new(StringComparer.OrdinalIgnoreCase);
     Dictionary<string, (string Url, string Title)> _channelBadges = new();
@@ -35,6 +37,9 @@ public sealed class ChatChannel
     // Raised on a worker thread whenever something is queued for the UI.
     public event Action<ChatChannel>? Updated;
 
+    // A live (not backfilled) message that mentions you or matches a highlight word. Worker thread.
+    public event Action<ChatChannel, ChatMessage>? Mentioned;
+
     public ChatChannel(string login)
     {
         Login = login.ToLowerInvariant();
@@ -42,17 +47,66 @@ public sealed class ChatChannel
     }
 
     // A VOD chat replay that reuses a live channel's emotes and badges.
-    public ChatChannel(ChatChannel live)
+    public ChatChannel(ChatChannel live) : this(live, true) { }
+
+    ChatChannel(ChatChannel live, bool isReplay)
     {
         Login = live.Login;
         RoomId = live.RoomId;
         Emotes = live.Emotes;
         _channelBadges = live._channelBadges;
         _ready = true;
-        IsReplay = true;
+        IsReplay = isReplay;
     }
 
     public bool IsReplay { get; }
+
+    // UI thread: include the buffer and pending messages without draining the main view's queue.
+    public UserHistory WatchUser(ChatMessage user)
+    {
+        lock (_historyLock)
+        {
+            var history = new UserHistory(this, user);
+            foreach (var message in Messages) history.Forward(message);
+            foreach (var item in _incoming) history.Forward(item);
+            _userHistories.Add(history);
+            return history;
+        }
+    }
+
+    public sealed class UserHistory : IDisposable
+    {
+        readonly ChatChannel _source;
+        readonly string? _userId;
+        readonly string _login;
+        public ChatChannel Channel { get; }
+
+        internal UserHistory(ChatChannel source, ChatMessage user)
+        {
+            _source = source;
+            _userId = user.UserId;
+            _login = user.Login;
+            Channel = new ChatChannel(source, source.IsReplay);
+        }
+
+        internal void Forward(object item)
+        {
+            if (item is ChatMessage message)
+            {
+                if (message.Kind == MessageKind.System) return;
+                bool match = !string.IsNullOrEmpty(_userId) && !string.IsNullOrEmpty(message.UserId)
+                    ? message.UserId == _userId
+                    : _login.Length > 0 && message.Login.Equals(_login, StringComparison.OrdinalIgnoreCase);
+                if (match) Channel.Enqueue(message.CopyForView());
+            }
+            else Channel.Enqueue(item);
+        }
+
+        public void Dispose()
+        {
+            lock (_source._historyLock) _source._userHistories.Remove(this);
+        }
+    }
 
     public async Task InitAsync(string roomId)
     {
@@ -108,7 +162,11 @@ public sealed class ChatChannel
         {
             case "PRIVMSG":
             case "USERNOTICE":
-                if (MessageBuilder.FromIrc(m, this) is { } msg) Enqueue(msg);
+                if (MessageBuilder.FromIrc(m, this) is { } msg)
+                {
+                    Enqueue(msg);
+                    if (!historical && !IsReplay && msg.Highlighted) Mentioned?.Invoke(this, msg);
+                }
                 break;
             case "CLEARMSG":
                 Enqueue(new DeleteOp(m.Tag("target-msg-id"), null));
@@ -149,10 +207,20 @@ public sealed class ChatChannel
         _ => $"{s / 86400}d",
     };
 
-    public void AddLocalEcho(string text)
+    public void AddLocalEcho(string text, ChatMessage? replyTo = null)
     {
         var login = SelfLogin ?? "";
-        Enqueue(MessageBuilder.Local(text, this, login, SelfDisplayName ?? login, SelfColor, _selfBadges));
+        Enqueue(MessageBuilder.Local(text, this, login, SelfDisplayName ?? login, SelfColor, _selfBadges, Settings.Current.UserId, replyTo));
+    }
+
+    // Adds a ready-made message (used by the thread and mentions views).
+    public void Add(ChatMessage message) => Enqueue(message);
+
+    public ChatMessage? FindMessage(string id)
+    {
+        for (int i = Messages.Count - 1; i >= 0; i--)
+            if (Messages[i].Id == id) return Messages[i];
+        return null;
     }
 
     public void AddSystem(string text) => Enqueue(ChatMessage.System(text));
@@ -163,7 +231,6 @@ public sealed class ChatChannel
 
     public BadgeRef? FindBadge(string key)
     {
-        if (!Settings.Current.ShowBadges) return null;
         if (_channelBadges.TryGetValue(key, out var b) || GlobalBadges.TryGetValue(key, out b))
             return new BadgeRef(ImageCache.Get(b.Url), b.Title);
         return null;
@@ -185,7 +252,11 @@ public sealed class ChatChannel
 
     void Enqueue(object item)
     {
-        _incoming.Enqueue(item);
+        lock (_historyLock)
+        {
+            _incoming.Enqueue(item);
+            foreach (var history in _userHistories) history.Forward(item);
+        }
         Updated?.Invoke(this);
     }
 
@@ -204,8 +275,7 @@ public sealed class ChatChannel
                     added.Add(msg);
                     break;
                 case DeleteOp { MessageId: { } id }:
-                    for (int i = Messages.Count - 1; i >= Math.Max(0, Messages.Count - 500); i--)
-                        if (Messages[i].Id == id) { Messages[i].Deleted = true; break; }
+                    if (FindMessage(id) is { } deleted) deleted.Deleted = true;
                     break;
                 case ClearOp:
                     Messages.Clear();

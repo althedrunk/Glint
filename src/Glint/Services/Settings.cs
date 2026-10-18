@@ -19,6 +19,17 @@ public sealed class AppSettings
     public string PreferredQuality { get; set; } = "Source";
     public bool LowLatency { get; set; } = true;
     public bool BlockAds { get; set; }
+    public double NewTabVolume { get; set; } = 70;
+    public bool UseLastVolumeForNewTabs { get; set; } = true;
+    public double SeekSeconds { get; set; } = 10;
+    public double LongSeekSeconds { get; set; } = 60;
+    public double ControlsHideSeconds { get; set; } = 2.5;
+
+    public string AccentColor { get; set; } = "Purple";
+    public string BackgroundStyle { get; set; } = "Dark";
+    public string InterfaceDensity { get; set; } = "Comfortable";
+    public double SidebarWidth { get; set; } = 244;
+    public double SidebarAvatarSize { get; set; } = 32;
 
     public double ChatWidth { get; set; } = 360;
     public bool SidebarCollapsed { get; set; }
@@ -37,11 +48,39 @@ public sealed class AppSettings
     public List<string> MultiviewPinnedChats { get; set; } = new();
     public bool ShowTimestamps { get; set; }
     public double ChatFontSize { get; set; } = 14;
+    public string ChatFontFamily { get; set; } = "Segoe UI Variable Text";
+    public bool PauseChatOnHover { get; set; } = true;
+    public double ChatMessageSpacing { get; set; } = 3;
+    public double ChatLineSpacing { get; set; } = 1;
+    public double EmoteScale { get; set; } = 1;
+    public string EmoteAnimation { get; set; } = "Always";
+    public string TimestampFormat { get; set; } = "HH:mm";
+    public bool AlternateChatRows { get; set; }
+    public bool ShowAnnouncements { get; set; } = true;
+    public bool ShowSubscriptionNotices { get; set; } = true;
+    public List<string> IgnoredUsers { get; set; } = new();
+    public List<string> IgnoredWords { get; set; } = new();
     public bool ShowBadges { get; set; } = true;
+    public bool ShowSevenTvPaints { get; set; } = true;
+    public bool ShowSevenTvBadges { get; set; } = true;
+    public List<string> HighlightWords { get; set; } = new();
+    public List<string> HighlightUsers { get; set; } = new();
+    public bool FlashOnMention { get; set; } = true;
+    public bool SoundOnMention { get; set; }
+    public bool SoundOnHighlight { get; set; }
+    public bool NotifyWhenFocused { get; set; }
+    public string MentionTone { get; set; } = "Bell";
+    public string HighlightTone { get; set; } = "Soft";
+    public double NotificationVolume { get; set; } = 50;
+    public Dictionary<string, string> ShortcutOverrides { get; set; } = new();
+    public List<PreferenceProfile> Profiles { get; set; } = new();
+    public List<PreferenceProfile> MultiviewPresets { get; set; } = new();
+    public List<string> RecentEmotes { get; set; } = new();
 
     // Twitch login (optional). Tokens are DPAPI-protected for the current Windows user.
     public string? ClientId { get; set; }
     public string? TokenClientId { get; set; }
+    public List<string> TokenScopes { get; set; } = new();
     public string? UserLogin { get; set; }
     public string? UserId { get; set; }
     public string? AccessTokenProtected { get; set; }
@@ -52,6 +91,20 @@ public sealed class AppSettings
     public int? WindowWidth { get; set; }
     public int? WindowHeight { get; set; }
     public bool WindowMaximized { get; set; }
+
+    // Optional twitch.tv website session (see TwitchSession). DPAPI-protected like the tokens below.
+    public string? WebSessionTokenProtected { get; set; }
+    public string? WebSessionLogin { get; set; }
+    public string? WebSessionUserId { get; set; }
+    public string? WebDeviceId { get; set; }
+    public bool CountWatchTime { get; set; } = true;
+
+    [JsonIgnore]
+    public string? WebSessionToken
+    {
+        get => Unprotect(WebSessionTokenProtected);
+        set => WebSessionTokenProtected = Protect(value);
+    }
 
     [JsonIgnore]
     public string? AccessToken

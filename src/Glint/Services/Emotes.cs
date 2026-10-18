@@ -17,6 +17,7 @@ public sealed class EmoteInfo
     public float Height { get; set; }
     public bool ZeroWidth { get; init; }
     public bool IsGlobal { get; init; }
+    public bool IsPersonal { get; init; }
     public string? Author { get; init; }
 
     AnimatedImage? _image;
@@ -24,7 +25,7 @@ public sealed class EmoteInfo
 
     public string ProviderLabel => Provider switch
     {
-        EmoteProvider.SevenTV => IsGlobal ? "7TV Global" : "7TV Channel",
+        EmoteProvider.SevenTV => IsPersonal ? "7TV Personal" : IsGlobal ? "7TV Global" : "7TV Channel",
         EmoteProvider.BTTV => IsGlobal ? "BTTV Global" : "BTTV Channel",
         EmoteProvider.FFZ => IsGlobal ? "FFZ Global" : "FFZ Channel",
         _ => "Twitch",
@@ -62,7 +63,7 @@ public static class EmoteSources
     }
 
     // Parses a 7TV "active emote" (from REST or EventAPI).
-    public static EmoteInfo? FromSevenTv(JsonElement e, bool global)
+    public static EmoteInfo? FromSevenTv(JsonElement e, bool global, bool personal = false)
     {
         var data = e.Obj("data");
         var host = data.Obj("host");
@@ -90,6 +91,7 @@ public static class EmoteSources
             Height = h,
             ZeroWidth = zeroWidth,
             IsGlobal = global,
+            IsPersonal = personal,
             Author = data.Obj("owner").Str("display_name"),
         };
     }
@@ -210,6 +212,19 @@ public sealed class ChannelEmotes
     public EmoteInfo? Find(string word) => _map.TryGetValue(word, out var e) ? e : null;
 
     public IEnumerable<EmoteInfo> All => _map.Values;
+
+    // For the emote picker: each source on its own, channel sets first.
+    public List<(string Title, List<EmoteInfo> Emotes)> Sections() => new()
+    {
+        ("7TV channel", Sorted(_seventv)),
+        ("BTTV channel", Sorted(_bttv)),
+        ("FFZ channel", Sorted(_ffz)),
+        ("7TV global", Sorted(_seventvGlobal)),
+        ("BTTV global", Sorted(_bttvGlobal)),
+        ("FFZ global", Sorted(_ffzGlobal)),
+    };
+
+    static List<EmoteInfo> Sorted(List<EmoteInfo> list) => list.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();
 
     public int Count => _map.Count;
 

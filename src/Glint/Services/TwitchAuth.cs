@@ -17,7 +17,7 @@ public static class TwitchAuth
         !string.IsNullOrWhiteSpace(Settings.Current.ClientId) ? Settings.Current.ClientId.Trim()
         : AppClientId.Length > 0 ? AppClientId : null;
 
-    const string Scopes = "chat:read chat:edit user:read:follows user:read:emotes";
+    const string Scopes = "chat:read chat:edit user:read:follows user:read:emotes clips:edit";
 
     public static async Task<DeviceCode> StartDeviceFlowAsync(string clientId)
     {
@@ -85,9 +85,50 @@ public static class TwitchAuth
             using var resp = await Net.Http.SendAsync(req);
             if (!resp.IsSuccessStatusCode) return null;
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Settings.Current.TokenScopes = doc.RootElement.Arr("scopes").Select(s => s.GetString() ?? "").ToList();
             return (doc.RootElement.Str("login")!, doc.RootElement.Str("user_id")!);
         }
         catch (Exception ex) { Log.Error("Token validate", ex); return null; }
+    }
+
+    // Logins from before clipping existed don't have the scope; logging in again adds it.
+    public static bool CanClip => Settings.Current.TokenScopes.Contains("clips:edit");
+
+    public sealed record ClipResult(string? Id, string? EditUrl, string? Error)
+    {
+        public string Url => $"https://clips.twitch.tv/{Id}";
+    }
+
+    // Clips the last ~30 seconds of a live broadcast. Twitch takes a few seconds to finish processing it.
+    public static async Task<ClipResult> CreateClipAsync(string broadcasterId, string token)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"https://api.twitch.tv/helix/clips?broadcaster_id={broadcasterId}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            req.Headers.Add("Client-Id", Settings.Current.TokenClientId ?? ClientId);
+            using var resp = await Net.Http.SendAsync(req);
+            var body = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+            {
+                Log.Error($"Create clip {(int)resp.StatusCode}: {body}");
+                return new ClipResult(null, null, (int)resp.StatusCode switch
+                {
+                    401 => "Log in again to allow clipping",
+                    403 => "This channel doesn't allow clips",
+                    404 => "The channel needs to be live to clip",
+                    _ => "Couldn't create the clip",
+                });
+            }
+            using var doc = JsonDocument.Parse(body);
+            var clip = doc.RootElement.Arr("data").FirstOrDefault();
+            return new ClipResult(clip.Str("id"), clip.Str("edit_url"), clip.Str("id") == null ? "Couldn't create the clip" : null);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Create clip", ex);
+            return new ClipResult(null, null, "Couldn't create the clip");
+        }
     }
 
     // Ensures the stored token is valid (refreshing if needed). Returns the token or null if logged out.
@@ -113,6 +154,28 @@ public static class TwitchAuth
         s.UserId = v.Value.UserId;
         Settings.Save();
         return token;
+    }
+
+    // Every Twitch emote you can use (subs, follower emotes, bits, globals). Needs user:read:emotes.
+    public static async Task<List<EmoteInfo>> GetUserEmotesAsync(string token)
+    {
+        var s = Settings.Current;
+        var emotes = new List<EmoteInfo>();
+        string? cursor = null;
+        do
+        {
+            var url = $"https://api.twitch.tv/helix/chat/emotes/user?user_id={s.UserId}" + (cursor != null ? $"&after={cursor}" : "");
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            req.Headers.Add("Client-Id", s.TokenClientId ?? ClientId);
+            using var resp = await Net.Http.SendAsync(req);
+            if (!resp.IsSuccessStatusCode) { Log.Error($"Helix user emotes {(int)resp.StatusCode}"); break; }
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            foreach (var e in doc.RootElement.Arr("data"))
+                if (e.Str("id") is { } id && e.Str("name") is { } name) emotes.Add(EmoteSources.Twitch(id, name));
+            cursor = doc.RootElement.Obj("pagination").Str("cursor");
+        } while (cursor != null && emotes.Count < 5000);
+        return emotes.GroupBy(e => e.Name).Select(g => g.First()).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public static async Task<List<string>> GetFollowedLoginsAsync(string token)

@@ -65,6 +65,11 @@ public sealed partial class MainWindow
         GoLiveButton.Click += (_, _) => { if (_active != null) ExitVod(_active); };
         _overlay.GoLiveButton.Click += (_, _) => { if (_active != null) ExitVod(_active); };
         _overlay.PlayPauseButton.Click += (_, _) => TogglePause();
+        _overlay.BackButton.Click += (_, _) => SeekBy(-S.SeekSeconds);
+        _overlay.ForwardButton.Click += (_, _) => SeekBy(S.SeekSeconds);
+
+        _overlay.Seek.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler((_, e) => ShowSeekPreview(e.GetCurrentPoint(_overlay.Seek).Position.X)), true);
+        _overlay.Seek.AddHandler(UIElement.PointerExitedEvent, new PointerEventHandler((_, _) => _overlay.SeekPreview.Visibility = Visibility.Collapsed), true);
 
         var speeds = new MenuFlyout();
         TrackFlyout(speeds);
@@ -81,7 +86,7 @@ public sealed partial class MainWindow
             };
             speeds.Items.Add(item);
         }
-        _overlay.SpeedButton.Flyout = speeds;
+        SetOverlayMenu(_overlay.SpeedButton, speeds);
 
         // The slider swallows pointer events, hence handledEventsToo. Seek on release, not on every pixel of a drag.
         _overlay.Seek.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => _seekDragging = true), true);
@@ -100,7 +105,7 @@ public sealed partial class MainWindow
     {
         double speed = _active?.Playback.Speed ?? 1;
         _overlay.SpeedButton.Content = speed.ToString("0.##", CultureInfo.InvariantCulture) + "x";
-        if (_overlay.SpeedButton.Flyout is MenuFlyout menu)
+        if (_overlayMenus.TryGetValue(_overlay.SpeedButton, out var menu))
             foreach (var item in menu.Items.OfType<RadioMenuFlyoutItem>()) item.IsChecked = (double)item.Tag == speed;
     }
 
@@ -109,6 +114,26 @@ public sealed partial class MainWindow
         if (!_seekDragging) return;
         _seekDragging = false;
         _player?.Seek(_overlay.Seek.Value);
+        ShowPlayerOverlay();
+    }
+
+    void ShowSeekPreview(double x)
+    {
+        var seek = _overlay.Seek;
+        // The track is inset from the slider's edges by about half the thumb.
+        double track = Math.Max(1, seek.ActualWidth - 20);
+        double fraction = Math.Clamp((x - 10) / track, 0, 1);
+        _overlay.SeekPreviewText.Text = VodItem.FormatTime(fraction * seek.Maximum);
+        _overlay.SeekPreview.Visibility = Visibility.Visible;
+        _overlay.SeekPreview.Measure(new Windows.Foundation.Size(200, 40));
+        double w = _overlay.SeekPreview.DesiredSize.Width;
+        Microsoft.UI.Xaml.Controls.Canvas.SetLeft(_overlay.SeekPreview, Math.Clamp(x - w / 2, 0, Math.Max(0, seek.ActualWidth - w)));
+    }
+
+    // 0-9 jump to 0%-90% of the video, like most players.
+    void SeekToFraction(double fraction)
+    {
+        if (_player?.Duration is { } d && d > 0) _player.Seek(d * fraction);
         ShowPlayerOverlay();
     }
 
@@ -189,7 +214,9 @@ public sealed partial class MainWindow
         if (variants.Count == 0)
         {
             playback.Player?.Stop();
-            playback.ErrorMessage = "Couldn't load this video. Glint can't play subscriber-only VODs yet.";
+            playback.ErrorMessage = TwitchSession.IsConnected
+                ? "Couldn't load this video. It may be subscriber-only."
+                : "Couldn't load this video. Subscriber-only VODs need your twitch.tv session (Settings).";
             OnPlayerState(tab, Player.PlayerState.Error);
             return;
         }

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
+    <Compile Include="../../src/Glint/Services/Settings.cs" Link="Settings.cs" />
+    <Compile Include="../../src/Glint/Services/PreferenceCatalog.cs" Link="PreferenceCatalog.cs" />
+    <Compile Include="../../src/Glint/Services/ShortcutMap.cs" Link="ShortcutMap.cs" />
+  </ItemGroup>
+</Project>

@@ -4,10 +4,13 @@ using System.Text.Json;
 
 namespace Glint;
 
-// 7TV EventAPI client: live emote-set updates (emote added / removed / renamed) for every open channel.
+// 7TV EventAPI client: live emote-set updates for every open channel, plus the paints, badges and
+// personal emotes of people chatting in them (fed into SevenTvCosmetics).
 public sealed class SevenTvEvents : IDisposable
 {
     readonly HashSet<string> _sets = new();
+    readonly HashSet<string> _channels = new();
+    static readonly string[] ChannelTypes = { "cosmetic.create", "entitlement.create", "entitlement.delete" };
     readonly SemaphoreSlim _sendLock = new(1, 1);
     ClientWebSocket? _ws;
     CancellationTokenSource? _cts;
@@ -34,6 +37,25 @@ public sealed class SevenTvEvents : IDisposable
         _ = SendSubAsync(36, setId);
     }
 
+    // Cosmetics for everyone 7TV knows is in this channel (Twitch room ID).
+    public void SubscribeChannel(string roomId)
+    {
+        lock (_channels) if (!_channels.Add(roomId)) return;
+        _ = SendChannelSubAsync(35, roomId);
+    }
+
+    public void UnsubscribeChannel(string roomId)
+    {
+        lock (_channels) if (!_channels.Remove(roomId)) return;
+        _ = SendChannelSubAsync(36, roomId);
+    }
+
+    async Task SendChannelSubAsync(int op, string roomId)
+    {
+        foreach (var type in ChannelTypes)
+            await SendAsync(JsonSerializer.Serialize(new { op, d = new { type, condition = new { ctx = "channel", platform = "TWITCH", id = roomId } } }));
+    }
+
     Task SendSubAsync(int op, string setId) =>
         SendAsync(JsonSerializer.Serialize(new { op, d = new { type = "emote_set.update", condition = new { object_id = setId } } }));
 
@@ -51,6 +73,9 @@ public sealed class SevenTvEvents : IDisposable
                 string[] sets;
                 lock (_sets) sets = _sets.ToArray();
                 foreach (var s in sets) await SendSubAsync(35, s);
+                string[] channels;
+                lock (_channels) channels = _channels.ToArray();
+                foreach (var c in channels) await SendChannelSubAsync(35, c);
                 await ReadLoopAsync(ws, ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested) { Log.Error("7TV EventAPI", ex); }
@@ -88,12 +113,31 @@ public sealed class SevenTvEvents : IDisposable
         if (op != 0) return; // only DISPATCH matters
 
         var d = root.Obj("d");
-        if (d.Str("type") != "emote_set.update") return;
         var body = d.Obj("body");
+        switch (d.Str("type"))
+        {
+            case "cosmetic.create": SevenTvCosmetics.OnCosmetic(body.Obj("object")); return;
+            case "entitlement.create": SevenTvCosmetics.OnEntitlement(body.Obj("object"), true); return;
+            case "entitlement.delete": SevenTvCosmetics.OnEntitlement(body.Obj("object"), false); return;
+            case "emote_set.create": SevenTvCosmetics.OnEmoteSetCreated(body.Obj("object")); return;
+            case "emote_set.update": break;
+            default: return;
+        }
         var setId = body.Str("id");
         if (setId == null) return;
-        var actor = body.Obj("actor").Str("display_name");
 
+        if (SevenTvCosmetics.IsPersonalSet(setId))
+        {
+            foreach (var p in body.Arr("pushed"))
+                if (p.Str("key") == "emotes") SevenTvCosmetics.OnPersonalSetChanged(setId, p.Obj("value"), null);
+            foreach (var p in body.Arr("pulled"))
+                if (p.Str("key") == "emotes") SevenTvCosmetics.OnPersonalSetChanged(setId, null, p.Obj("old_value"));
+            foreach (var p in body.Arr("updated"))
+                if (p.Str("key") == "emotes") SevenTvCosmetics.OnPersonalSetChanged(setId, p.Obj("value"), p.Obj("old_value"));
+            return;
+        }
+
+        var actor = body.Obj("actor").Str("display_name");
         foreach (var p in body.Arr("pushed"))
             if (p.Str("key") == "emotes") EmoteSetChanged?.Invoke(setId, actor, p.Obj("value").Clone(), null, null);
         foreach (var p in body.Arr("pulled"))

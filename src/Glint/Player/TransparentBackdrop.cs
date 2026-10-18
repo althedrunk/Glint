@@ -28,6 +28,11 @@ sealed partial class TransparentBackdrop : SystemBackdrop
         base.OnTargetDisconnected(target);
     }
 
+    protected override void OnDefaultSystemBackdropConfigurationChanged(ICompositionSupportsSystemBackdrop target, XamlRoot xamlRoot)
+    {
+        // The transparent brush does not depend on theme or activation changes.
+    }
+
     internal static void ConfigureWindow(IntPtr hwnd)
     {
         var margins = new Margins();

@@ -36,14 +36,19 @@ public sealed partial class MainWindow
 
     void UpdateChatInput()
     {
+        DropStaleReply();
+        Chat.AllowReplies = _irc.IsAuthenticated && _active?.Vod == null;
+        foreach (var pane in _multiviewChats.Values) pane.View.AllowReplies = _irc.IsAuthenticated && pane.Tab.Vod == null;
         if (ChatTarget?.Vod != null)
         {
             ChatInput.IsEnabled = false;
+            EmoteButton.IsEnabled = false;
             ChatInput.PlaceholderText = "Chat replay";
             return;
         }
         bool canChat = _irc.IsAuthenticated && ChatTarget != null;
         ChatInput.IsEnabled = canChat;
+        EmoteButton.IsEnabled = canChat;
         ChatInput.PlaceholderText = canChat ? $"Message #{ChatTarget!.Login}" : "Log in to chat";
     }
 
@@ -84,6 +89,7 @@ public sealed partial class MainWindow
             else
             {
                 candidates = target.Chat.Emotes.All.Select(e => e.Name)
+                    .Concat(_userEmotes?.Select(e => e.Name) ?? Enumerable.Empty<string>())
                     .Where(n => n.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                     .Concat(target.Chat.Chatters().Where(c => c.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
                     .Distinct()
@@ -109,15 +115,21 @@ public sealed partial class MainWindow
 
     async void ChatInput_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key == VirtualKey.Escape && _replyTo != null) { CancelReply(); e.Handled = true; return; }
         if (e.Key != VirtualKey.Enter || ChatTarget is not { } target || target.Vod != null) return;
         e.Handled = true;
         var text = ChatInput.Text.Trim();
         if (text.Length == 0 || !_irc.IsAuthenticated) return;
         ChatInput.Text = "";
         var chat = target.Chat;
-        await _irc.SendMessageAsync(target.Login, text);
+
+        var replyTo = _replyTab == target && !text.StartsWith('/') ? _replyTo : null;
+        if (replyTo != null && !text.StartsWith("@" + replyTo.Login + " ", StringComparison.OrdinalIgnoreCase))
+            text = $"@{replyTo.Login} {text}"; // same as twitch.tv, so other clients show who it's for
+        CancelReply();
+        await _irc.SendMessageAsync(target.Login, text, replyTo?.Id);
         // Twitch doesn't echo your own messages back, so add it locally (commands other than /me aren't messages).
-        if (!text.StartsWith('/') || text.StartsWith("/me ")) chat.AddLocalEcho(text);
+        if (!text.StartsWith('/') || text.StartsWith("/me ")) chat.AddLocalEcho(text, replyTo);
         if (MultiviewActive && _multiviewChats.TryGetValue(target, out var pane)) pane.View.ScrollToBottom();
         else if (target == _active) Chat.ScrollToBottom();
     }

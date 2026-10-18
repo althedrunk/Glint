@@ -33,10 +33,12 @@ public sealed partial class MainWindow : Window
     readonly Dictionary<string, ChannelEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
     readonly ObservableCollection<ChannelEntry> _sidebarItems = new();
     readonly List<ChannelTab> _tabs = new();
-    readonly DispatcherQueueTimer _refreshTimer, _clockTimer, _vodTimer;
+    readonly DispatcherQueueTimer _refreshTimer, _viewerTimer, _clockTimer, _vodTimer;
 
     ChannelTab? _active;
-    bool _dialogOpen, _fullscreen, _closing;
+    bool _fullscreen, _closing;
+    SettingsWindow? _settingsWindow;
+    Microsoft.UI.Dispatching.DispatcherQueueTimer _cutoutWatch = null!;
 
     static AppSettings S => Settings.Current;
 
@@ -66,9 +68,11 @@ public sealed partial class MainWindow : Window
             SidebarEmpty.Visibility = _sidebarItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         WireUi();
-        ApplyLayoutSettings();
+        ApplyAppearance();
+        ApplyPlayerPreferences();
 
         _refreshTimer = Timer(TimeSpan.FromSeconds(60), async () => await RefreshLiveAsync());
+        _viewerTimer = Timer(TimeSpan.FromSeconds(30), async () => await RefreshLiveAsync(openTabsOnly: true));
         _clockTimer = Timer(TimeSpan.FromSeconds(1), UpdateInfoMeta);
         _vodTimer = Timer(TimeSpan.FromMilliseconds(250), VodTick);
 
@@ -115,33 +119,51 @@ public sealed partial class MainWindow : Window
         SetMultiview(S.Multiview);
         UpdateEmptyState();
 
-        var token = await TwitchAuth.EnsureTokenAsync();
-        StartIrc(token);
         _ = RefreshLiveAsync();
-        if (token != null) await LoadFollowedAsync(token);
+        await ApplyAccountAsync();
         _refreshTimer.Start();
+        _viewerTimer.Start();
         _clockTimer.Start();
     }
 
-    void StartIrc(string? token)
+    // The account chat, follows and emotes run as: the twitch.tv session when it's connected,
+    // otherwise the API login. Null when logged out.
+    string? _chatLogin;
+
+    async Task ApplyAccountAsync()
     {
-        _irc.Start(S.UserLogin, token);
+        _userEmotes = null;
+        await TwitchSession.CheckAsync();
+        var apiToken = await TwitchAuth.EnsureTokenAsync();
+        if (TwitchSession.IsConnected) StartIrc(TwitchSession.Login, S.WebSessionToken);
+        else StartIrc(apiToken != null ? S.UserLogin : null, apiToken);
+        await LoadFollowedAsync(apiToken);
+    }
+
+    void StartIrc(string? login, string? token)
+    {
+        _chatLogin = token != null ? login : null;
+        _irc.Start(_chatLogin, token);
         foreach (var t in _tabs)
         {
-            t.Chat.SelfLogin = token != null ? S.UserLogin : null;
+            t.Chat.SelfLogin = _chatLogin;
             _irc.Join(t.Login);
         }
         UpdateAccountUi();
         UpdateChatInput();
     }
 
-    async Task LoadFollowedAsync(string token)
+    async Task LoadFollowedAsync(string? apiToken)
     {
         try
         {
-            var follows = await TwitchAuth.GetFollowedLoginsAsync(token);
+            var follows = TwitchSession.IsConnected ? await TwitchSession.GetFollowedLoginsAsync()
+                        : apiToken != null ? await TwitchAuth.GetFollowedLoginsAsync(apiToken)
+                        : new List<string>();
+            if (follows == null) return; // request failed; keep what we had
             foreach (var e in _entries.Values) e.IsFollowed = false;
             foreach (var login in follows) GetEntry(login).IsFollowed = true;
+            RebuildSidebar();
             await RefreshLiveAsync();
         }
         catch (Exception ex) { Log.Error("Followed", ex); }
@@ -152,9 +174,13 @@ public sealed partial class MainWindow : Window
         _closing = true;
         _overlayTimer.Stop();
         _refreshTimer.Stop();
+        _viewerTimer.Stop();
         _clockTimer.Stop();
         _vodTimer.Stop();
+        _settingsWindow?.Close();
+        NotificationSound.Stop();
         _overlay.Close();
+        foreach (var window in _chatHistoryWindows.ToList()) window.Close();
         DisposeMultiviewChats();
         Chat.Dispose();
         SavePlacement();
@@ -200,6 +226,25 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // Tabs hang from the bottom of the title bar (like Edge), so line the logo and the buttons on the right
+    // up with the tab row rather than the middle of the bar.
+    void AlignTitleBar()
+    {
+        if (Tabs.TabItems.FirstOrDefault() is not TabViewItem first || first.ActualHeight <= 0)
+        {
+            BrandPanel.VerticalAlignment = TitleActions.VerticalAlignment = VerticalAlignment.Center;
+            BrandPanel.Margin = TitleActions.Margin = new Thickness(0);
+            return;
+        }
+        var top = first.TransformToVisual(TitleBar).TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
+        foreach (var panel in new FrameworkElement[] { BrandPanel, TitleActions })
+        {
+            panel.VerticalAlignment = VerticalAlignment.Top;
+            panel.Height = first.ActualHeight;
+            panel.Margin = new Thickness(0, top, 0, 0);
+        }
+    }
+
     void UpdateCaptionInset()
     {
         var scale = Root.XamlRoot?.RasterizationScale ?? 1;
@@ -209,21 +254,40 @@ public sealed partial class MainWindow : Window
     void WireUi()
     {
         SidebarToggle.Click += (_, _) => { S.SidebarCollapsed = !S.SidebarCollapsed; Settings.Save(); ApplyLayoutSettings(); };
-        SettingsButton.Click += async (_, _) => await ShowSettingsAsync();
-        AccountButton.Click += async (_, _) => await ShowSettingsAsync();
+        SettingsButton.Click += (_, _) => ShowSettings();
+        AccountButton.Click += (_, _) => ShowSettings();
 
         AddBox.KeyDown += (_, e) => AddBoxKey(AddBox, e);
         AddBoxCompact.KeyDown += (_, e) => { AddBoxKey(AddBoxCompact, e); if (e.Handled) AddFlyout.Hide(); };
         EmptyAddBox.KeyDown += (_, e) => AddBoxKey(EmptyAddBox, e);
 
-        ChannelList.ItemClick += (_, e) => { if (e.ClickedItem is ChannelEntry ce) OpenChannel(ce.Login, true); };
+        ChannelList.ItemClick += (_, e) =>
+        {
+            if (e.ClickedItem is not ChannelEntry entry) return;
+            if (CtrlDown) OpenChannel(entry.Login, true);
+            else OpenChannelInCurrentTab(entry.Login);
+        };
+        ChannelList.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, e) =>
+        {
+            if (!e.GetCurrentPoint(ChannelList).Properties.IsMiddleButtonPressed) return;
+            for (DependencyObject? node = e.OriginalSource as DependencyObject; node != null; node = VisualTreeHelper.GetParent(node))
+                if (node is FrameworkElement { DataContext: ChannelEntry entry })
+                {
+                    OpenChannel(entry.Login, true);
+                    e.Handled = true;
+                    break;
+                }
+        }), true);
         ChannelList.RightTapped += ChannelList_RightTapped;
 
         Tabs.SelectionChanged += (_, _) =>
         {
+            if (_changingTabs) return;
             if (Tabs.SelectedItem is TabViewItem { Tag: ChannelTab t }) ActivateTab(t);
+            else ActivateEmptyTab();
         };
-        Tabs.TabCloseRequested += (_, e) => { if (e.Tab.Tag is ChannelTab t) CloseTab(t); };
+        Tabs.AddTabButtonClick += (_, _) => OpenNewTab();
+        Tabs.TabCloseRequested += (_, e) => CloseTabItem(e.Tab);
         Tabs.TabItemsChanged += (_, _) => SaveTabs();
 
         WirePlayerControls();
@@ -248,57 +312,39 @@ public sealed partial class MainWindow : Window
             ChatInput.Focus(FocusState.Programmatic);
         };
 
+        WireReplies();
+        WireEmotePicker();
+        WireBrowse();
+        WireClips();
+        WireSession();
+        _overlay.BackgroundPressed += CloseOverlayMenus;
+        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => CloseOverlayMenus()), true);
+        _cutoutWatch = _dispatcher.CreateTimer();
+        _cutoutWatch.Interval = TimeSpan.FromMilliseconds(120);
+        _cutoutWatch.Tick += (_, _) =>
+        {
+            UpdateVideoBounds();
+            if (Root.XamlRoot == null || VisualTreeHelper.GetOpenPopupsForXamlRoot(Root.XamlRoot).Count == 0) _cutoutWatch.Stop();
+        };
+        Tabs.SizeChanged += (_, _) => AlignTitleBar();
+        Tabs.TabItemsChanged += (_, _) => _dispatcher.TryEnqueue(AlignTitleBar);
         WireSplitter();
         WireKeyboard();
     }
 
     void WireKeyboard()
     {
-        void Accel(VirtualKey key, VirtualKeyModifiers mods, Action action)
-        {
-            var a = new KeyboardAccelerator { Key = key, Modifiers = mods };
-            a.Invoked += (_, e) => { action(); e.Handled = true; };
-            Root.KeyboardAccelerators.Add(a);
-        }
         Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
-        Accel(VirtualKey.W, VirtualKeyModifiers.Control, () => { if (_active != null) CloseTab(_active); });
-        Accel(VirtualKey.Tab, VirtualKeyModifiers.Control, () => CycleTab(1));
-        Accel(VirtualKey.Tab, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, () => CycleTab(-1));
-        Accel(VirtualKey.L, VirtualKeyModifiers.Control, FocusAddBox);
-        Accel(VirtualKey.T, VirtualKeyModifiers.Control, FocusAddBox);
-        Accel(VirtualKey.F11, VirtualKeyModifiers.None, ToggleFullscreen);
-        Accel(VirtualKey.F5, VirtualKeyModifiers.None, Reload);
-        Accel(VirtualKey.M, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, () => SetMultiview(!_multiview));
-
-        // Single-letter shortcuts only when you're not typing somewhere.
-        Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, e) =>
-        {
-            if (FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox or ButtonBase or Slider or ComboBox) return;
-            switch (e.Key)
-            {
-                case VirtualKey.F: ToggleFullscreen(); break;
-                case VirtualKey.T: ToggleTheatre(); break;
-                case VirtualKey.C: ToggleChat(); break;
-                case VirtualKey.M: ToggleMute(); break;
-                case VirtualKey.Up: ChangeVolume(5); break;
-                case VirtualKey.Down: ChangeVolume(-5); break;
-                case VirtualKey.Space: TogglePause(); break;
-                case VirtualKey.Left when _active?.Vod != null: SeekBy(-10); break;
-                case VirtualKey.Right when _active?.Vod != null: SeekBy(10); break;
-                case VirtualKey.Escape when _multiviewZoom != null: ZoomMultiview(null); break;
-                case VirtualKey.Escape when _fullscreen: ToggleFullscreen(); break;
-                case VirtualKey.Escape when _vodPanelOpen: CloseVodPanel(); break;
-                case VirtualKey.Escape when S.Theatre: ToggleTheatre(); break;
-                default: return;
-            }
-            e.Handled = true;
-        }), true);
+        RebuildShortcuts();
+        Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnShortcutKey), true);
     }
+    static bool CtrlDown => Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control)
+        .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
     void FocusAddBox()
     {
         if (MultiviewActive) { ShowMultiviewAdd(); return; }
-        if (_tabs.Count == 0) EmptyAddBox.Focus(FocusState.Keyboard);
+        if (_active == null) EmptyAddBox.Focus(FocusState.Keyboard);
         else if (S.SidebarCollapsed) AddFlyout.ShowAt(AddCompactButton);
         else AddBox.Focus(FocusState.Keyboard);
     }
@@ -346,10 +392,13 @@ public sealed partial class MainWindow : Window
         VideoArea.CornerRadius = new CornerRadius(chrome ? 8 : 0, 0, 0, 0);
 
         bool collapsed = S.SidebarCollapsed;
-        SidebarCol.Width = new GridLength(!chrome || MultiviewActive ? 0 : collapsed ? 56 : 244);
+        SidebarCol.Width = new GridLength(!chrome || MultiviewActive ? 0 : collapsed ? 56 : Math.Clamp(S.SidebarWidth, 200, 400));
         Sidebar.Visibility = chrome && !MultiviewActive ? Visibility.Visible : Visibility.Collapsed;
         Sidebar.Padding = collapsed ? new Thickness(4, 2, 4, 8) : new Thickness(8, 2, 6, 8);
         AddBox.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        SidebarBrowseText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        SidebarBrowseButton.HorizontalAlignment = collapsed ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+        SidebarBrowseButton.Padding = collapsed ? new Thickness(10, 8, 10, 8) : new Thickness(10, 7, 10, 7);
         AddCompactButton.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
         SidebarHeader.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         SidebarEmpty.Opacity = collapsed ? 0 : 1;
@@ -370,11 +419,11 @@ public sealed partial class MainWindow : Window
         ApplyMultiviewLayout();
     }
 
-    bool ChatShown => _tabs.Count > 0 && (S.ChatOnly && !_fullscreen || (_fullscreen ? S.FullscreenChat : !S.ChatHidden));
+    bool ChatShown => _active != null && (S.ChatOnly && !_fullscreen || (_fullscreen ? S.FullscreenChat : !S.ChatHidden));
 
     void UpdateEmptyState()
     {
-        bool empty = _tabs.Count == 0;
+        bool empty = _active == null;
         EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
         MainArea.Visibility = empty || S.ChatOnly || MultiviewActive ? Visibility.Collapsed : Visibility.Visible;
         ChatPanel.Visibility = ChatShown && !MultiviewActive ? Visibility.Visible : Visibility.Collapsed;
@@ -390,45 +439,42 @@ public sealed partial class MainWindow : Window
 
     void UpdateAccountUi()
     {
-        AccountText.Text = _irc.IsAuthenticated && S.UserLogin != null ? S.UserLogin : "Log in";
+        AccountText.Text = _irc.IsAuthenticated && _chatLogin != null ? _chatLogin : "Log in";
     }
 
-    async Task ShowSettingsAsync()
+    void ShowSettings()
     {
-        if (_dialogOpen) return;
-        _dialogOpen = true;
-        UpdateVideoBounds(); // dialogs draw under the video window otherwise
-        try
-        {
-            var dialog = new SettingsDialog(this) { XamlRoot = Root.XamlRoot };
-            await dialog.ShowAsync();
-        }
-        finally
-        {
-            _dialogOpen = false;
-            UpdateVideoBounds();
-        }
+        if (_closing) return;
+        if (_settingsWindow != null) { _settingsWindow.Activate(); return; }
+        var window = _settingsWindow = new SettingsWindow(this, _hwnd);
+        window.Closed += (_, _) => _settingsWindow = null;
+        window.Activate();
     }
 
-    internal async Task OnLoggedInAsync()
-    {
-        var token = await TwitchAuth.EnsureTokenAsync();
-        StartIrc(token);
-        if (token != null) await LoadFollowedAsync(token);
-    }
+    internal Task OnLoggedInAsync() => ApplyAccountAsync();
 
-    internal void OnLoggedOut()
+    internal async void OnLoggedOut()
     {
         TwitchAuth.Logout();
-        foreach (var e in _entries.Values) e.IsFollowed = false;
-        RebuildSidebar();
-        StartIrc(null);
+        await ApplyAccountAsync();
     }
 
     internal void OnChatStyleChanged()
     {
         Chat.RebuildFormats();
         foreach (var pane in _multiviewChats.Values) pane.View.RebuildFormats();
+        foreach (var window in _chatHistoryWindows) window.View.RebuildFormats();
+    }
+
+    internal void OnChatPreferencesChanged()
+    {
+        Chat.RefreshMessages(false);
+        foreach (var pane in _multiviewChats.Values) pane.View.RefreshMessages(false);
+        foreach (var window in _chatHistoryWindows) window.View.RefreshMessages(false);
+        _mentions.Drain();
+        _unreadMentions = Math.Min(_unreadMentions, _mentions.Messages.Count(m => !ChatFilters.IsIgnored(m)));
+        UpdateMentionsBadge();
+        IgnoreWordsButton.Opacity = S.IgnoredWords.Count > 0 ? 1 : 0.7;
     }
 
     internal void OnAdSkippingChanged()

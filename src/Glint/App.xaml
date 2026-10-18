@@ -9,10 +9,28 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="GlintThemeAccent" Color="#A970FF" />
+                    <StaticResource x:Key="AccentButtonBackground" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="AccentButtonBackgroundPointerOver" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="AccentButtonBackgroundPressed" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="ToggleSwitchFillOn" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="ToggleSwitchFillOnPointerOver" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="ToggleSwitchFillOnPressed" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="SliderTrackValueFill" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="SliderTrackValueFillPointerOver" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="SliderTrackValueFillPressed" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="SliderThumbBackground" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="ListViewItemSelectionIndicatorBrush" ResourceKey="GlintThemeAccent" />
+                    <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="GlintThemeAccent" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
 
             <Color x:Key="GlintAccent">#A970FF</Color>
             <Color x:Key="GlintLive">#FF4F5E</Color>
             <SolidColorBrush x:Key="GlintAccentBrush" Color="{StaticResource GlintAccent}" />
+            <SolidColorBrush x:Key="GlintBackgroundBrush" Color="#18181C" />
             <SolidColorBrush x:Key="GlintLiveBrush" Color="{StaticResource GlintLive}" />
             <SolidColorBrush x:Key="GlintPanelBrush" Color="#B3141418" />
             <SolidColorBrush x:Key="GlintPanelBorderBrush" Color="#14FFFFFF" />

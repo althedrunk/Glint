@@ -29,10 +29,49 @@ public sealed partial class MainWindow
 
     void HideIdleOverlay()
     {
-        if (_overlay.IsPointerInside || _player?.Paused == true || _seekDragging ||
-            _overlay.QualityButton.Flyout?.IsOpen == true || _overlay.SpeedButton.Flyout?.IsOpen == true) return;
+        if (_overlay.IsPointerInside || _player?.Paused == true || _seekDragging || DateTime.UtcNow < _clipToastUntil ||
+            OverlayMenuOpen) return;
         _overlay.HideOverlay();
         _overlayTimer.Stop();
+    }
+
+    // The overlay never takes focus, so its menus don't light-dismiss on their own. We open them ourselves
+    // (second click on the button closes) and close them on clicks anywhere else.
+    readonly Dictionary<Button, MenuFlyout> _overlayMenus = new();
+    readonly Dictionary<Button, DateTime> _overlayMenuClosed = new();
+    DateTime _overlayMenuOpened;
+
+    void SetOverlayMenu(Button button, MenuFlyout menu)
+    {
+        bool first = !_overlayMenus.ContainsKey(button);
+        if (_overlayMenus.TryGetValue(button, out var old) && old.IsOpen) old.Hide();
+        _overlayMenus[button] = menu;
+        menu.Closed += (_, _) => _overlayMenuClosed[button] = DateTime.UtcNow;
+        menu.Opened += (_, _) => _overlayMenuOpened = DateTime.UtcNow;
+        if (!first) return;
+        button.Click += (_, _) =>
+        {
+            var current = _overlayMenus[button];
+            if (current.IsOpen) { current.Hide(); return; }
+            // If light dismiss already closed it on this same press, don't pop it straight back open.
+            if (_overlayMenuClosed.TryGetValue(button, out var at) && DateTime.UtcNow - at < TimeSpan.FromMilliseconds(300)) return;
+            foreach (var other in _overlayMenus.Values) if (other != current && other.IsOpen) other.Hide();
+            current.ShowAt(button);
+        };
+    }
+
+    bool OverlayMenuOpen => _overlayMenus.Values.Any(m => m.IsOpen);
+
+    // Called from clicks elsewhere. Deferred to after the current input event, and never while a menu is
+    // still opening: hiding a flyout mid-open crashes WinUI.
+    void CloseOverlayMenus()
+    {
+        if (!OverlayMenuOpen) return;
+        _dispatcher.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (_closing || DateTime.UtcNow - _overlayMenuOpened < TimeSpan.FromMilliseconds(400)) return;
+            foreach (var menu in _overlayMenus.Values) if (menu.IsOpen) menu.Hide();
+        });
     }
 
     void TrackFlyout(MenuFlyout menu)
@@ -266,7 +305,7 @@ public sealed partial class MainWindow
             };
             menu.Items.Add(item);
         }
-        _overlay.QualityButton.Flyout = menu;
+        SetOverlayMenu(_overlay.QualityButton, menu);
         _overlay.QualityButton.IsEnabled = playback?.Variants.Count > 0;
         _overlay.QualityText.Text = playback?.SelectedVariant?.Name ?? "Quality";
     }
@@ -331,12 +370,11 @@ public sealed partial class MainWindow
 
     void OnVideoInput(string cmd)
     {
+        if (cmd is "click" or "dblclick") CloseOverlayMenus();
         ShowPlayerOverlay();
         switch (cmd)
         {
             case "dblclick": ToggleFullscreen(); break;
-            case "wheel 1": ChangeVolume(5); break;
-            case "wheel -1": ChangeVolume(-5); break;
         }
     }
 
@@ -362,7 +400,7 @@ public sealed partial class MainWindow
         if (_closing) return;
         if (MultiviewActive) { UpdateMultiviewVideoBounds(); return; }
         foreach (var tab in _tabs) if (tab != _active) tab.Playback.Host?.Hide();
-        bool visible = _host != null && !IsIconic(_hwnd) && !_dialogOpen && !_vodPanelOpen && _videoPopups.Count == 0 && _active != null && _active.Playback.AdStatus != AdSkipStatus.Waiting && !S.ChatOnly
+        bool visible = _host != null && !IsIconic(_hwnd) && !_vodPanelOpen && _videoPopups.Count == 0 && _active != null && _active.Playback.AdStatus != AdSkipStatus.Waiting && !S.ChatOnly
                        && MainArea.Visibility == Visibility.Visible
                        && _playerState is PlayerState.Playing or PlayerState.Buffering
                        && VideoArea.ActualWidth > 0 && Root.XamlRoot != null;
@@ -377,15 +415,39 @@ public sealed partial class MainWindow
         int x = (int)Math.Round(pt.X * scale), y = (int)Math.Round(pt.Y * scale);
         int width = (int)Math.Round(VideoArea.ActualWidth * scale), height = (int)Math.Round(VideoArea.ActualHeight * scale);
         _host!.SetBounds(x, y, width, height, true);
+        _host.SetCutouts(PopupRects());
         PlacePlayerOverlay(VideoArea);
+    }
+
+    // Screen areas of open XAML popups (menus, flyouts, tooltips), in client pixels.
+    List<(int X, int Y, int W, int H)> PopupRects()
+    {
+        var rects = new List<(int, int, int, int)>();
+        if (Root.XamlRoot is not { } xamlRoot) return rects;
+        double scale = xamlRoot.RasterizationScale;
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot))
+        {
+            if (popup.Child is not FrameworkElement child || child.ActualWidth <= 0 || child.ActualHeight <= 0) continue;
+            var r = child.TransformToVisual(null).TransformBounds(new Rect(0, 0, child.ActualWidth, child.ActualHeight));
+            rects.Add(((int)Math.Floor(r.X * scale) - 2, (int)Math.Floor(r.Y * scale) - 2,
+                (int)Math.Ceiling(r.Width * scale) + 4, (int)Math.Ceiling(r.Height * scale) + 4));
+        }
+        if (rects.Count > 0) _cutoutWatch?.Start(); // keep checking until they're gone
+        return rects;
+    }
+
+    // Popups animate open and some close without a layout pass, so recheck shortly after.
+    void RefreshCutoutsSoon()
+    {
+        UpdateVideoBounds();
+        _cutoutWatch?.Start();
     }
 
     void HidePlayerOverlay()
     {
         _overlayAvailable = false;
         _overlayTimer.Stop();
-        _overlay.QualityButton.Flyout?.Hide();
-        _overlay.SpeedButton.Flyout?.Hide();
+        CloseOverlayMenus();
         _overlay.HideOverlay(immediately: true);
     }
 
@@ -395,7 +457,8 @@ public sealed partial class MainWindow
         _overlay.ConfigureForWidth(area.ActualWidth);
         var point = area.TransformToVisual(Root).TransformPoint(new Point());
         int width = (int)Math.Round(area.ActualWidth * scale), height = (int)Math.Round(area.ActualHeight * scale);
-        int overlayHeight = Math.Min(height, (int)Math.Round((96 + (_overlay.IsCompact ? 38 : 0) + (_active?.Vod != null ? 24 : 0) + (!MultiviewActive && (_fullscreen || S.Theatre) ? 44 : 0)) * scale));
+        int overlayHeight = Math.Min(height, (int)Math.Round((96 + (_overlay.IsCompact ? 38 : 0) + (_active?.Vod != null ? 24 : 0)
+            + (!MultiviewActive && (_fullscreen || S.Theatre) ? 44 : 0) + (_overlay.ClipToast.Visibility == Visibility.Visible ? 48 : 0)) * scale));
         var screen = new NativePoint { X = (int)Math.Round(point.X * scale), Y = (int)Math.Round(point.Y * scale) + height - overlayHeight };
         if (!ClientToScreen(_hwnd, ref screen)) return;
         _overlay.Place(screen.X, screen.Y, width, overlayHeight);
@@ -484,16 +547,18 @@ public sealed partial class MainWindow
         bool paused = _player?.Paused == true;
         _overlay.PlayPauseButton.Content = paused ? "\uE768" : "\uE769";
         AutomationProperties.SetItemStatus(_overlay.PlayPauseButton, paused ? "Paused" : "Playing");
-        ToolTipService.SetToolTip(_overlay.PlayPauseButton, paused ? "Play (Space)" : "Pause (Space)");
+        ToolTipService.SetToolTip(_overlay.PlayPauseButton, ShortcutText(paused ? "Play" : "Pause", "pause"));
         _overlay.FullscreenButton.Content = _fullscreen ? "\uE73F" : "\uE740";
         _overlay.TheatreButton.Background = S.Theatre && !_fullscreen
             ? new SolidColorBrush(Windows.UI.Color.FromArgb(64, 255, 255, 255)) : null;
-        ToolTipService.SetToolTip(_overlay.TheatreButton, S.Theatre && !_fullscreen ? "Exit theatre (T)" : "Theatre mode (T)");
+        ToolTipService.SetToolTip(_overlay.TheatreButton, ShortcutText(S.Theatre && !_fullscreen ? "Exit theatre" : "Theatre mode", "theatre"));
         AutomationProperties.SetName(_overlay.TheatreButton, S.Theatre && !_fullscreen ? "Exit theatre mode" : "Theatre mode");
         _overlay.ChatButton.Opacity = (MultiviewActive ? MultiviewChatShown : ChatShown) ? 1 : 0.7;
         _overlay.LiveBadge.Visibility = !vod && tab?.Entry.IsLive == true ? Visibility.Visible : Visibility.Collapsed;
         _overlay.GoLiveButton.Visibility = vod && tab?.Entry.IsLive == true ? Visibility.Visible : Visibility.Collapsed;
-        _overlay.Seek.Visibility = _overlay.SpeedButton.Visibility = vod ? Visibility.Visible : Visibility.Collapsed;
+        _overlay.SeekRow.Visibility = _overlay.SpeedButton.Visibility = _overlay.BackButton.Visibility = _overlay.ForwardButton.Visibility =
+            vod ? Visibility.Visible : Visibility.Collapsed;
+        _overlay.ClipButton.Visibility = vod ? Visibility.Collapsed : Visibility.Visible;
         _overlay.TitlePanel.Visibility = !MultiviewActive && (_fullscreen || S.Theatre) ? Visibility.Visible : Visibility.Collapsed;
         _overlay.TitleText.Text = tab?.Entry.DisplayName ?? "";
         _overlay.SubtitleText.Text = tab?.Vod?.Title ?? tab?.Entry.Stream?.Title ?? "";

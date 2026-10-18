@@ -12,6 +12,11 @@ public sealed partial class ChannelEntry : INotifyPropertyChanged
     public ChannelEntry(string login) => Login = login.ToLowerInvariant();
 
     public string Login { get; }
+    public double AvatarSize => Settings.Current.SidebarAvatarSize;
+    public CornerRadius AvatarRadius => new(AvatarSize / 2);
+    public Thickness RowPadding => new(2, Settings.Current.InterfaceDensity == "Compact" ? 2 : 6, 2,
+        Settings.Current.InterfaceDensity == "Compact" ? 2 : 6);
+    public void RefreshAppearance() { Raise(nameof(AvatarSize)); Raise(nameof(AvatarRadius)); Raise(nameof(RowPadding)); }
     public string? Id { get; private set; }
 
     string? _displayName;

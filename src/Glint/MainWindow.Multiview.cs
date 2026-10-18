@@ -38,7 +38,7 @@ public sealed partial class MainWindow
     ChannelTab? _multiviewZoom, _multiviewRecipient;
     string _multiviewResolvedDock = "Below";
 
-    bool MultiviewActive => _multiview && !S.ChatOnly && _tabs.Count > 0;
+    bool MultiviewActive => _multiview && !S.ChatOnly && _active != null;
     bool MultiviewChatShown => MultiviewActive && S.MultiviewChats != "Hidden" && ChatShown;
 
     void WireMultiview()
@@ -130,16 +130,18 @@ public sealed partial class MainWindow
         WireMultiviewDivider();
     }
 
+    // Popups are cut out of the video (see VideoHost.SetCutouts); this just makes sure the holes
+    // follow the popup as it opens and closes.
     void TrackVideoPopup(FlyoutBase flyout)
     {
-        flyout.Opening += (_, _) => SetVideoPopup(flyout, true);
-        flyout.Closed += (_, _) => SetVideoPopup(flyout, false);
+        flyout.Opened += (_, _) => RefreshCutoutsSoon();
+        flyout.Closed += (_, _) => RefreshCutoutsSoon();
     }
 
     void TrackVideoPopup(ComboBox combo)
     {
-        combo.DropDownOpened += (_, _) => SetVideoPopup(combo, true);
-        combo.DropDownClosed += (_, _) => SetVideoPopup(combo, false);
+        combo.DropDownOpened += (_, _) => RefreshCutoutsSoon();
+        combo.DropDownClosed += (_, _) => RefreshCutoutsSoon();
     }
 
     void SetVideoPopup(object popup, bool open)
@@ -336,7 +338,7 @@ public sealed partial class MainWindow
         if (tab?.Playback.AdStatus == AdSkipStatus.Waiting) slot.Status.Text = "Waiting for stream after ads";
         slot.Retry.Content = tab == null ? "Add a channel" : "Reload";
         slot.Retry.Visibility = tab == null || tab.Playback.State is PlayerState.Idle or PlayerState.Error or PlayerState.Ended ? Visibility.Visible : Visibility.Collapsed;
-        slot.Root.BorderBrush = new SolidColorBrush(tab != null && tab == _active ? Windows.UI.Color.FromArgb(255, 145, 71, 255) : Windows.UI.Color.FromArgb(255, 50, 50, 60));
+        slot.Root.BorderBrush = new SolidColorBrush(tab != null && tab == _active ? Appearance.Accent : Windows.UI.Color.FromArgb(255, 50, 50, 60));
         if (tab != null)
         {
             UpdateMultiviewAudio(tab);
@@ -365,11 +367,18 @@ public sealed partial class MainWindow
             bool active = MultiviewActive;
             MultiviewRoot.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             var destination = active ? MultiviewComposerInput : ChatInputHost;
-            if (!destination.Children.Contains(ChatInput))
+            var actions = active ? MultiviewChatActionsHost : ChatActionsHost;
+            if (!actions.Children.Contains(ChatHeaderActions))
             {
-                ChatInputHost.Children.Remove(ChatInput);
-                MultiviewComposerInput.Children.Remove(ChatInput);
-                destination.Children.Add(ChatInput);
+                ChatActionsHost.Children.Remove(ChatHeaderActions);
+                MultiviewChatActionsHost.Children.Remove(ChatHeaderActions);
+                actions.Children.Add(ChatHeaderActions);
+            }
+            if (!destination.Children.Contains(Composer))
+            {
+                ChatInputHost.Children.Remove(Composer);
+                MultiviewComposerInput.Children.Remove(Composer);
+                destination.Children.Add(Composer);
             }
             if (!active)
             {
@@ -490,6 +499,8 @@ public sealed partial class MainWindow
         pane.Pin.Click += (_, _) => ToggleMultiviewPin(tab);
         Grid.SetColumn(pane.Pin, 1);
         header.Children.Add(pane.Recipient); header.Children.Add(pane.Pin);
+        WireChatView(pane.View, () => tab);
+        pane.View.AllowReplies = _irc.IsAuthenticated && tab.Vod == null;
         pane.View.MentionRequested += name =>
         {
             SetChatRecipient(tab);
@@ -677,7 +688,7 @@ public sealed partial class MainWindow
         if (_closing) return;
         if (MultiviewActive && _multiviewSlots.Any(s => s.Tab == tab))
         {
-            if (command is "click" or "dblclick" or "wheel 1" or "wheel -1")
+            if (command is "click" or "dblclick")
             {
                 Tabs.SelectedItem = tab.Item;
                 MultiviewRoot.Focus(FocusState.Programmatic);
@@ -689,9 +700,10 @@ public sealed partial class MainWindow
 
     void UpdateMultiviewVideoBounds()
     {
-        bool show = !IsIconic(_hwnd) && !_dialogOpen && !_vodPanelOpen && _videoPopups.Count == 0 && Root.XamlRoot != null && MultiviewRoot.Visibility == Visibility.Visible;
+        bool show = !IsIconic(_hwnd) && !_vodPanelOpen && _videoPopups.Count == 0 && Root.XamlRoot != null && MultiviewRoot.Visibility == Visibility.Visible;
         double scale = Root.XamlRoot?.RasterizationScale ?? 1;
         MultiviewSlot? focused = null;
+        List<(int, int, int, int)>? popups = null;
         foreach (var tab in _tabs)
         {
             var slot = _multiviewSlots.FirstOrDefault(s => s.Tab == tab && s.Root.Parent == MultiviewVideos);
@@ -702,6 +714,7 @@ public sealed partial class MainWindow
             var point = area.TransformToVisual(Root).TransformPoint(new Point());
             tab.Playback.Host?.SetBounds((int)Math.Round(point.X * scale), (int)Math.Round(point.Y * scale),
                 (int)Math.Round(area.ActualWidth * scale), (int)Math.Round(area.ActualHeight * scale), true);
+            tab.Playback.Host?.SetCutouts(popups ??= PopupRects());
             if (tab == _active && tab.Playback.Host != null) focused = slot;
         }
         if (focused == null) { HidePlayerOverlay(); return; }

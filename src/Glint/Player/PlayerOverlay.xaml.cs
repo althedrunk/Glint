@@ -31,6 +31,8 @@ public sealed partial class PlayerOverlay : Window
     public event Action? Activity;
     public event Action<int>? Wheel;
     public event Action? DoubleClicked;
+    // A press on the overlay that no button or slider took (the gradient / empty space).
+    public event Action? BackgroundPressed;
 
     public PlayerOverlay(IntPtr owner)
     {
@@ -81,11 +83,8 @@ public sealed partial class PlayerOverlay : Window
         Root.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(160) };
         Root.PointerEntered += (_, _) => Activity?.Invoke();
         Root.PointerMoved += (_, _) => Activity?.Invoke();
-        Root.PointerWheelChanged += (_, e) =>
-        {
-            Wheel?.Invoke(e.GetCurrentPoint(Root).Properties.MouseWheelDelta);
-            e.Handled = true;
-        };
+        Root.PointerPressed += (_, _) => BackgroundPressed?.Invoke();
+        VolumeSlider.VolumeWheel += delta => Wheel?.Invoke(delta);
         Root.DoubleTapped += (_, e) =>
         {
             // only on empty space, not when double-clicking a button

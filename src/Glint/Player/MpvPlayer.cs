@@ -122,8 +122,8 @@ public sealed class MpvPlayer : IDisposable
         Command("keybind", "MBTN_LEFT_DBL", "script-message glint dblclick");
         Command("keybind", "MBTN_LEFT", "script-message glint click");
         Command("keybind", "MOUSE_MOVE", "script-message glint move");
-        Command("keybind", "WHEEL_UP", "script-message glint wheel 1");
-        Command("keybind", "WHEEL_DOWN", "script-message glint wheel -1");
+        Command("keybind", "WHEEL_UP", "ignore");
+        Command("keybind", "WHEEL_DOWN", "ignore");
 
         _eventThread = new Thread(EventLoop) { IsBackground = true, Name = "mpv events" };
         _eventThread.Start();
