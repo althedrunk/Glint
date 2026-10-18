@@ -4,6 +4,10 @@
 
 Glint is a native Twitch client for Windows, bringing streams and chat into a customisable desktop app.
 
+![Glint in single view with player controls, channel tabs and chat](docs/screenshots/single-view.png)
+
+*Screenshots use fictional channels and messages with placeholder video.*
+
 ## Overview
 
 - Watch live streams and past broadcasts with hardware-accelerated playback, theatre and fullscreen modes.
@@ -13,6 +17,8 @@ Glint is a native Twitch client for Windows, bringing streams and chat into a cu
 - Customise the appearance, chat, notifications and shortcuts, with saved profiles and layouts.
 
 Watching and reading chat work without an account. Sign in with Twitch for sending messages, followed channels, your emotes and supported subscriber and Turbo benefits.
+
+![Glint multiview with two players and a separate chat below each](docs/screenshots/multiview.png)
 
 ## Install from source
 
