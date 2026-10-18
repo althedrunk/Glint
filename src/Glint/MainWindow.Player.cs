@@ -148,7 +148,7 @@ public sealed partial class MainWindow
     {
         if (variants.Count == 0) return null;
         var pref = S.PreferredQuality;
-        if (pref == "Source") return variants.FirstOrDefault(v => v.IsSource) ?? variants[0];
+        if (pref == "Source") return variants[0]; // list is sorted best first, so this also picks 1440p when there is one
         return variants.FirstOrDefault(v => v.Name.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
                ?? variants.FirstOrDefault(v => v.IsSource) ?? variants[0];
     }

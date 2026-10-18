@@ -7,7 +7,7 @@ decoding, and chat is drawn with Direct2D (via Win2D).
 
 ## Features
 
-- Live streams with a quality picker
+- Live streams with a quality picker. Glint asks Twitch for HEVC and AV1 versions as well as H.264, which is how Twitch serves 1440p.
 - Chat with Twitch, 7TV, BTTV and FFZ emotes, including animated and zero-width emotes. Glint picks up 7TV emote changes while you watch.
 - Recent chat history loads when you open a channel
 - Past broadcasts, with chat replay that follows the video

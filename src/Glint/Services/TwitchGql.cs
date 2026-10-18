@@ -15,7 +15,7 @@ public sealed record CommentFragment(string Text, string? EmoteId);
 public sealed record VodComment(string Id, int Offset, string Login, string DisplayName, string? Color,
     List<CommentFragment> Fragments, List<string> Badges);
 
-public sealed record StreamVariant(string Name, string Url, int Bandwidth, bool IsSource)
+public sealed record StreamVariant(string Name, string Url, int Bandwidth, bool IsSource, int Height = 0, string Codec = "H.264")
 {
     public override string ToString() => Name;
 }
@@ -151,7 +151,8 @@ public static class TwitchGql
         var tok = data?.Obj("videoPlaybackAccessToken") ?? default;
         if (tok.Str("value") is not { } value || tok.Str("signature") is not { } sig) return new();
         var url = $"https://usher.ttvnw.net/vod/{videoId}.m3u8?sig={sig}&token={Uri.EscapeDataString(value)}" +
-                  "&allow_source=true&allow_audio_only=true&playlist_include_framerate=true&player_backend=mediaplayer";
+                  "&allow_source=true&allow_audio_only=true&playlist_include_framerate=true&player_backend=mediaplayer" +
+                  "&supported_codecs=" + SupportedCodecs;
         using var resp = await Net.Http.GetAsync(url, ct);
         if (!resp.IsSuccessStatusCode) return new();
         return ParseMasterPlaylist(await resp.Content.ReadAsStringAsync(ct));
@@ -208,11 +209,16 @@ public static class TwitchGql
         var url = $"https://usher.ttvnw.net/api/channel/hls/{Uri.EscapeDataString(login.ToLowerInvariant())}.m3u8" +
                   $"?sig={sig}&token={Uri.EscapeDataString(value)}&allow_source=true&allow_audio_only=true" +
                   $"&fast_bread=true&player_backend=mediaplayer&playlist_include_framerate=true" +
+                  $"&supported_codecs={SupportedCodecs}" +
                   $"&p={Random.Shared.Next(100000, 999999)}";
         using var resp = await Net.Http.GetAsync(url, ct);
         if (!resp.IsSuccessStatusCode) return new(); // 404 = offline
         return ParseMasterPlaylist(await resp.Content.ReadAsStringAsync(ct));
     }
+
+    // Twitch only lists HEVC/AV1 renditions (which is where 1440p lives) for players that ask for them.
+    // mpv decodes all three, on the GPU where the card supports it.
+    const string SupportedCodecs = "av1,h265,h264";
 
     static readonly Regex AttrRegex = new(@"([A-Z0-9\-]+)=(""[^""]*""|[^,]*)", RegexOptions.Compiled);
 
@@ -247,13 +253,27 @@ public static class TwitchGql
                 var name = names.GetValueOrDefault(group, group);
                 if (group == "audio_only") name = "Audio only";
                 int.TryParse(pending.GetValueOrDefault("BANDWIDTH", "0"), out var bw);
-                variants.Add(new StreamVariant(name, line, bw, group == "chunked"));
+                int width = 0, height = 0;
+                var res = pending.GetValueOrDefault("RESOLUTION", "").Split('x');
+                if (res.Length == 2) { int.TryParse(res[0], out width); int.TryParse(res[1], out height); }
+                var codecs = pending.GetValueOrDefault("CODECS", "");
+                var codec = codecs.StartsWith("hvc1") || codecs.StartsWith("hev1") ? "HEVC"
+                          : codecs.StartsWith("av01") ? "AV1" : "H.264";
+                // Dual-format streams also carry a vertical copy for phones; not useful here.
+                if (height <= width || group == "audio_only")
+                    variants.Add(new StreamVariant(name, line, bw, group == "chunked", height, codec));
                 pending = null;
             }
         }
-        // Best first, audio-only last
+
+        // Same name in two codecs (e.g. 1080p60 in H.264 and HEVC): say which is which.
+        var clashing = variants.GroupBy(v => v.Name).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
+        variants = variants.Select(v => clashing.Contains(v.Name) && v.Codec != "H.264" ? v with { Name = $"{v.Name} ({v.Codec})" } : v).ToList();
+
+        // Highest resolution first, audio-only last
         return variants
             .OrderBy(v => v.Name == "Audio only")
+            .ThenByDescending(v => v.Height)
             .ThenByDescending(v => v.IsSource)
             .ThenByDescending(v => v.Bandwidth)
             .ToList();

@@ -336,7 +336,9 @@ public sealed partial class MainWindow : Window
         ChannelList.Margin = collapsed ? new Thickness(-2, 0, -2, 0) : new Thickness(-4, 0, -4, 0);
 
         bool chatOnly = S.ChatOnly && !fs;
-        bool chat = ChatShown;
+        // Column widths don't depend on whether tabs are open yet (visibility handles that), otherwise
+        // opening the first tab at startup leaves the chat column at zero width.
+        bool chat = !fs || S.FullscreenChat;
         MainCol.Width = chatOnly ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         ChatCol.Width = !chat ? new GridLength(0) : chatOnly ? new GridLength(1, GridUnitType.Star) : new GridLength(S.ChatWidth);
         SplitterCol.Width = new GridLength(chat && !chatOnly ? 5 : 0);
