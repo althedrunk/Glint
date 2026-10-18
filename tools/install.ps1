@@ -27,6 +27,8 @@ $targets = @(
     (Join-Path ([Environment]::GetFolderPath('Programs')) 'Glint.lnk')
 )
 foreach ($lnk in $targets) {
+    # Recreate rather than overwrite, otherwise Explorer keeps showing a cached old icon
+    Remove-Item $lnk -ErrorAction SilentlyContinue
     $s = $shell.CreateShortcut($lnk)
     $s.TargetPath = $exe
     $s.WorkingDirectory = $installDir
@@ -35,4 +37,6 @@ foreach ($lnk in $targets) {
     $s.Save()
     Write-Host "Shortcut: $lnk"
 }
+# Ask Explorer to refresh its icon cache so an updated icon shows up straight away
+& "$env:SystemRoot\System32\ie4uinit.exe" -show
 Write-Host 'Done.'
