@@ -10,7 +10,7 @@ public sealed record DeviceCode(string Code, string UserCode, Uri VerificationUr
 public static class TwitchAuth
 {
     // Glint's own app on dev.twitch.tv (client type "Public"). Client IDs aren't secret, so it ships in the app.
-    public const string AppClientId = "";
+    public const string AppClientId = "2nzt9ygobu2qoihvawxodil7mqrn10";
 
     // The ID to log in with: a custom one from settings, else the built-in one.
     public static string? ClientId =>
