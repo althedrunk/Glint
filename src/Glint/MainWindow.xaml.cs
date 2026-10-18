@@ -112,6 +112,7 @@ public sealed partial class MainWindow : Window
         foreach (var login in S.OpenTabs.ToList()) OpenChannel(login, activate: false);
         var toSelect = _tabs.FirstOrDefault(t => t.Login == activeLogin) ?? _tabs.FirstOrDefault();
         if (toSelect != null) Tabs.SelectedItem = toSelect.Item;
+        SetMultiview(S.Multiview);
         UpdateEmptyState();
 
         var token = await TwitchAuth.EnsureTokenAsync();
@@ -154,12 +155,16 @@ public sealed partial class MainWindow : Window
         _clockTimer.Stop();
         _vodTimer.Stop();
         _overlay.Close();
+        DisposeMultiviewChats();
+        Chat.Dispose();
         SavePlacement();
         SaveTabs();
         Settings.SaveNow();
-        try { _player?.Dispose(); } catch { }
-        _host?.Dispose();
-        _ads?.Dispose();
+        foreach (var tab in _tabs)
+        {
+            try { tab.Playback.Dispose(); }
+            catch (Exception ex) { Log.Error("Player shutdown", ex); }
+        }
         _irc.Dispose();
         _stv.Dispose();
     }
@@ -223,6 +228,7 @@ public sealed partial class MainWindow : Window
 
         WirePlayerControls();
         WireVodControls();
+        WireMultiview();
 
         VideoArea.SizeChanged += (_, _) => UpdateVideoBounds();
         Root.LayoutUpdated += (_, _) => UpdateVideoBounds();
@@ -234,6 +240,7 @@ public sealed partial class MainWindow : Window
 
         ChatInput.KeyDown += ChatInput_KeyDown;
         ChatInput.PreviewKeyDown += ChatInput_PreviewKeyDown;
+        ChatInput.TextChanged += (_, _) => SaveChatDraft();
         Chat.MentionRequested += name =>
         {
             ChatInput.Text = $"@{name} " + ChatInput.Text;
@@ -261,6 +268,7 @@ public sealed partial class MainWindow : Window
         Accel(VirtualKey.T, VirtualKeyModifiers.Control, FocusAddBox);
         Accel(VirtualKey.F11, VirtualKeyModifiers.None, ToggleFullscreen);
         Accel(VirtualKey.F5, VirtualKeyModifiers.None, Reload);
+        Accel(VirtualKey.M, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, () => SetMultiview(!_multiview));
 
         // Single-letter shortcuts only when you're not typing somewhere.
         Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, e) =>
@@ -277,6 +285,7 @@ public sealed partial class MainWindow : Window
                 case VirtualKey.Space: TogglePause(); break;
                 case VirtualKey.Left when _active?.Vod != null: SeekBy(-10); break;
                 case VirtualKey.Right when _active?.Vod != null: SeekBy(10); break;
+                case VirtualKey.Escape when _multiviewZoom != null: ZoomMultiview(null); break;
                 case VirtualKey.Escape when _fullscreen: ToggleFullscreen(); break;
                 case VirtualKey.Escape when _vodPanelOpen: CloseVodPanel(); break;
                 case VirtualKey.Escape when S.Theatre: ToggleTheatre(); break;
@@ -288,6 +297,7 @@ public sealed partial class MainWindow : Window
 
     void FocusAddBox()
     {
+        if (MultiviewActive) { ShowMultiviewAdd(); return; }
         if (_tabs.Count == 0) EmptyAddBox.Focus(FocusState.Keyboard);
         else if (S.SidebarCollapsed) AddFlyout.ShowAt(AddCompactButton);
         else AddBox.Focus(FocusState.Keyboard);
@@ -336,8 +346,8 @@ public sealed partial class MainWindow : Window
         VideoArea.CornerRadius = new CornerRadius(chrome ? 8 : 0, 0, 0, 0);
 
         bool collapsed = S.SidebarCollapsed;
-        SidebarCol.Width = new GridLength(!chrome ? 0 : collapsed ? 56 : 244);
-        Sidebar.Visibility = chrome ? Visibility.Visible : Visibility.Collapsed;
+        SidebarCol.Width = new GridLength(!chrome || MultiviewActive ? 0 : collapsed ? 56 : 244);
+        Sidebar.Visibility = chrome && !MultiviewActive ? Visibility.Visible : Visibility.Collapsed;
         Sidebar.Padding = collapsed ? new Thickness(4, 2, 4, 8) : new Thickness(8, 2, 6, 8);
         AddBox.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         AddCompactButton.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
@@ -357,6 +367,7 @@ public sealed partial class MainWindow : Window
         ShowVideoButton.Visibility = chatOnly ? Visibility.Visible : Visibility.Collapsed;
         UpdateEmptyState();
         UpdateModeUi();
+        ApplyMultiviewLayout();
     }
 
     bool ChatShown => _tabs.Count > 0 && (S.ChatOnly && !_fullscreen || (_fullscreen ? S.FullscreenChat : !S.ChatHidden));
@@ -365,9 +376,10 @@ public sealed partial class MainWindow : Window
     {
         bool empty = _tabs.Count == 0;
         EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        MainArea.Visibility = empty || S.ChatOnly ? Visibility.Collapsed : Visibility.Visible;
-        ChatPanel.Visibility = ChatShown ? Visibility.Visible : Visibility.Collapsed;
-        Splitter.Visibility = ChatShown && !(S.ChatOnly && !_fullscreen) ? Visibility.Visible : Visibility.Collapsed;
+        MainArea.Visibility = empty || S.ChatOnly || MultiviewActive ? Visibility.Collapsed : Visibility.Visible;
+        ChatPanel.Visibility = ChatShown && !MultiviewActive ? Visibility.Visible : Visibility.Collapsed;
+        Splitter.Visibility = ChatShown && !MultiviewActive && !(S.ChatOnly && !_fullscreen) ? Visibility.Visible : Visibility.Collapsed;
+        MultiviewRoot.Visibility = MultiviewActive ? Visibility.Visible : Visibility.Collapsed;
         UpdateVideoBounds();
     }
 
@@ -413,5 +425,15 @@ public sealed partial class MainWindow : Window
         StartIrc(null);
     }
 
-    internal void OnChatStyleChanged() => Chat.RebuildFormats();
+    internal void OnChatStyleChanged()
+    {
+        Chat.RebuildFormats();
+        foreach (var pane in _multiviewChats.Values) pane.View.RebuildFormats();
+    }
+
+    internal void OnAdSkippingChanged()
+    {
+        foreach (var tab in _tabs.Where(t => t.Vod == null && t.Playback.Started).ToList())
+            if (tab.Playback.SelectedVariant is { } variant) LoadLive(tab, variant);
+    }
 }

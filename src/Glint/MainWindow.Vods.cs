@@ -50,7 +50,6 @@ public sealed partial class MainWindow
 {
     static readonly double[] Speeds = { 0.5, 0.75, 1, 1.25, 1.5, 2 };
     bool _vodPanelOpen, _seekDragging, _updatingSeek;
-    double _speed = 1;
 
     void WireVodControls()
     {
@@ -72,10 +71,11 @@ public sealed partial class MainWindow
         foreach (var speed in Speeds)
         {
             string label = speed.ToString("0.##", CultureInfo.InvariantCulture) + "x";
-            var item = new RadioMenuFlyoutItem { Text = label, GroupName = "Speed", IsChecked = speed == _speed };
+            var item = new RadioMenuFlyoutItem { Text = label, Tag = speed, GroupName = "Speed", IsChecked = speed == 1 };
             item.Click += (_, _) =>
             {
-                _speed = speed;
+                if (_active == null) return;
+                _active.Playback.Speed = speed;
                 _overlay.SpeedButton.Content = label;
                 _player?.SetSpeed(speed);
             };
@@ -94,6 +94,14 @@ public sealed partial class MainWindow
             if (!_seekDragging) _player?.Seek(e.NewValue); // keyboard nudges on the slider
             ShowPlayerOverlay();
         };
+    }
+
+    void UpdateSpeedItems()
+    {
+        double speed = _active?.Playback.Speed ?? 1;
+        _overlay.SpeedButton.Content = speed.ToString("0.##", CultureInfo.InvariantCulture) + "x";
+        if (_overlay.SpeedButton.Flyout is MenuFlyout menu)
+            foreach (var item in menu.Items.OfType<RadioMenuFlyoutItem>()) item.IsChecked = (double)item.Tag == speed;
     }
 
     void EndSeekDrag()
@@ -143,9 +151,14 @@ public sealed partial class MainWindow
 
     async Task PlayVodAsync(ChannelTab tab, VideoInfo video, double start)
     {
-        int version = ++_playVersion;
-        _ads?.Stop();
-        _adBreak = false;
+        if (_closing || !_tabs.Contains(tab) || S.ChatOnly) return;
+        var playback = tab.Playback;
+        int version = ++playback.Version;
+        playback.Started = true;
+        playback.Resolving = true;
+        playback.ErrorMessage = null;
+        playback.Ads?.Stop();
+        playback.AdStatus = AdSkipStatus.None;
 
         if (tab.Vod?.Id != video.Id || tab.Replay == null)
         {
@@ -154,38 +167,44 @@ public sealed partial class MainWindow
         }
         tab.Vod = video;
         tab.VodPosition = start;
-        Chat.SetChannel(tab.Replay);
-        UpdateInfoBar();
-        UpdateModeUi();
-        UpdateChatInput();
-        ShowVideoMessage(null, null, retry: false, loading: true);
+        if (tab == _active)
+        {
+            _vodTimer.Stop();
+            RefreshChatViews();
+            UpdateInfoBar();
+            UpdateModeUi();
+            UpdateChatInput();
+        }
+        OnPlayerState(tab, Player.PlayerState.Loading);
 
         List<StreamVariant> variants;
         try { variants = await TwitchGql.GetVodVariantsAsync(video.Id); }
         catch (Exception ex) { Log.Error("VOD variants", ex); variants = new(); }
-        if (version != _playVersion || tab != _active) return;
+        if (_closing || !_tabs.Contains(tab) || version != playback.Version) return;
+        playback.Resolving = false;
 
-        SetQualityItems(variants);
+        playback.Variants = variants;
+        playback.SelectedVariant = PickVariant(variants);
+        if (tab == _active) SetQualityItems();
         if (variants.Count == 0)
         {
-            _player?.Stop();
-            _playerState = Player.PlayerState.Idle;
-            ShowVideoMessage("Couldn't load this video. Glint can't play subscriber-only VODs yet.", null, retry: true);
-            UpdateVideoBounds();
+            playback.Player?.Stop();
+            playback.ErrorMessage = "Couldn't load this video. Glint can't play subscriber-only VODs yet.";
+            OnPlayerState(tab, Player.PlayerState.Error);
             return;
         }
-        LoadVod(_selectedVariant!, start > 3 ? start : null);
-        _vodTimer.Start();
+        LoadVod(tab, playback.SelectedVariant!, Math.Max(0, start));
+        if (tab == _active) _vodTimer.Start();
     }
 
-    void LoadVod(StreamVariant variant, double? start)
+    void LoadVod(ChannelTab tab, StreamVariant variant, double? start)
     {
-        var player = EnsurePlayer();
+        var player = EnsurePlayer(tab);
         if (player == null) return;
-        _playerState = Player.PlayerState.Loading;
+        OnPlayerState(tab, Player.PlayerState.Loading);
         player.Load(variant.Url, start);
-        player.SetSpeed(_speed);
-        UpdateVideoBounds();
+        player.SetSpeed(tab.Playback.Speed);
+        if (tab == _active) UpdateVideoBounds();
     }
 
     void ExitVod(ChannelTab tab)
@@ -195,7 +214,7 @@ public sealed partial class MainWindow
         tab.ReplayEngine = null;
         tab.VodPosition = 0;
         _vodTimer.Stop();
-        Chat.SetChannel(tab.Chat);
+        RefreshChatViews();
         UpdateInfoBar();
         UpdateModeUi();
         UpdateChatInput();
@@ -204,6 +223,17 @@ public sealed partial class MainWindow
 
     void VodTick()
     {
+        if (MultiviewActive)
+        {
+            foreach (var tab in _tabs.Where(t => t != _active && t.Vod != null &&
+                (_multiviewSlots.Any(s => s.Tab == t) || _multiviewChats.TryGetValue(t, out var pane) && pane.View.Channel != null)))
+            {
+                if (tab.Playback.Player?.TimePos is not { } position) continue;
+                tab.VodPosition = position;
+                tab.ReplayEngine?.Tick(position);
+            }
+        }
+        if (_playerState is not (Player.PlayerState.Playing or Player.PlayerState.Buffering)) return;
         if (_active?.Vod is not { } vod || _player == null) return;
         if (_player.TimePos is not { } pos) return;
         var duration = _player.Duration ?? vod.LengthSeconds;

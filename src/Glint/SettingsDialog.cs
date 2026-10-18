@@ -33,10 +33,9 @@ public sealed partial class SettingsDialog : ContentDialog
         font.ValueChanged += (_, e) => { S.ChatFontSize = e.NewValue; Settings.Save(); _window.OnChatStyleChanged(); };
         root.Children.Add(Section("Chat", new StackPanel { Spacing = 4, Children = { timestamps, badges, font } }));
 
-        var ads = Toggle("Skip ads", S.BlockAds, on => S.BlockAds = on);
-        var adsNote = Note("Off by default. When on and Twitch stitches an ad into the stream, Glint switches to an ad-free copy " +
-                           "if it can find one, otherwise the picture holds until the break ends. Takes effect next time a stream loads. " +
-                           "This goes against Twitch's terms of service, so it's your call.");
+        var ads = Toggle("Skip ads", S.BlockAds, on => { S.BlockAds = on; _window.OnAdSkippingChanged(); });
+        var adsNote = Note("Tries another stream during detected ad breaks. If none is available, playback waits for the broadcast to return. " +
+                           "Some commercial-break screens may still get through. Changing this reloads open live streams.");
         var lowLatency = Toggle("Low latency", S.LowLatency, on => S.LowLatency = on);
         root.Children.Add(Section("Video", new StackPanel { Spacing = 4, Children = { ads, adsNote, lowLatency } }));
 

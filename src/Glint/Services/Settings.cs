@@ -12,6 +12,9 @@ public sealed class AppSettings
     public string? ActiveTab { get; set; }
 
     public double Volume { get; set; } = 70;
+    public List<string> MutedTabs { get; set; } = new();
+    // Migrated to the last active tab when reading older settings.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Muted { get; set; }
     public string PreferredQuality { get; set; } = "Source";
     public bool LowLatency { get; set; } = true;
@@ -23,6 +26,15 @@ public sealed class AppSettings
     public bool ChatHidden { get; set; }
     public bool Theatre { get; set; }
     public bool FullscreenChat { get; set; }
+    public bool Multiview { get; set; }
+    public int MultiviewCount { get; set; } = 2;
+    public string MultiviewLayout { get; set; } = "Grid";
+    public string MultiviewChats { get; set; } = "Each stream";
+    public string MultiviewDock { get; set; } = "Below";
+    public double MultiviewChatWidth { get; set; } = 320;
+    public double MultiviewChatHeight { get; set; } = 260;
+    public List<string> MultiviewChannels { get; set; } = new();
+    public List<string> MultiviewPinnedChats { get; set; } = new();
     public bool ShowTimestamps { get; set; }
     public double ChatFontSize { get; set; } = 14;
     public bool ShowBadges { get; set; } = true;
@@ -83,7 +95,13 @@ public static class Settings
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), Options) ?? new();
+            {
+                var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), Options) ?? new();
+                if (settings.Muted && settings.ActiveTab is { } login &&
+                    !settings.MutedTabs.Contains(login, StringComparer.OrdinalIgnoreCase)) settings.MutedTabs.Add(login);
+                settings.Muted = false;
+                return settings;
+            }
         }
         catch (Exception ex) { Log.Error("Settings load", ex); }
         return new AppSettings();

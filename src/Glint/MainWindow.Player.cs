@@ -12,16 +12,12 @@ namespace Glint;
 
 public sealed partial class MainWindow
 {
-    VideoHost? _host;
-    MpvPlayer? _player;
-    AdSkipper? _ads;
-    PlayerState _playerState = PlayerState.Idle;
-    int _playVersion;
-    bool _adBreak, _overlayAvailable;
+    VideoHost? _host => _active?.Playback.Host;
+    MpvPlayer? _player => _active?.Playback.Player;
+    PlayerState _playerState => _active?.Playback.State ?? PlayerState.Idle;
+    bool _overlayAvailable, _updatingVolume;
     readonly PlayerOverlay _overlay;
     readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _overlayTimer;
-    List<StreamVariant> _variants = new();
-    StreamVariant? _selectedVariant;
 
     void ShowPlayerOverlay()
     {
@@ -52,10 +48,12 @@ public sealed partial class MainWindow
         UpdateMuteIcon();
         _overlay.VolumeSlider.ValueChanged += (_, e) =>
         {
+            if (_updatingVolume || _active is not { } tab) return;
             S.Volume = e.NewValue;
-            if (S.Muted) { S.Muted = false; _player?.SetMuted(false); }
+            tab.Playback.Volume = e.NewValue;
+            SetTabMuted(tab, false);
             UpdateMuteIcon();
-            _player?.SetVolume(e.NewValue);
+            ApplyTabAudio(tab);
             Settings.Save();
             ShowPlayerOverlay();
         };
@@ -67,29 +65,80 @@ public sealed partial class MainWindow
         _overlay.ChatButton.Click += (_, _) => ToggleChat();
         _overlay.Activity += ShowPlayerOverlay;
         _overlay.Wheel += delta => ChangeVolume(delta > 0 ? 5 : -5);
-        _overlay.DoubleClicked += ToggleFullscreen;
+        _overlay.DoubleClicked += () =>
+        {
+            if (MultiviewActive && _active != null) ZoomMultiview(_multiviewZoom == _active ? null : _active);
+            else ToggleFullscreen();
+        };
         ChatOnlyButton.Click += (_, _) => SetChatOnly(true);
         ShowVideoButton.Click += (_, _) => SetChatOnly(false);
     }
 
-    MpvPlayer? EnsurePlayer()
+    void ApplyTabAudio(ChannelTab tab)
     {
-        if (_player != null) return _player;
+        tab.Playback.Player?.SetVolume(tab.Playback.Volume);
+        tab.Playback.Player?.SetMuted(tab.Playback.Muted || S.ChatOnly);
+        UpdateTabAudioButton(tab);
+    }
+
+    void UpdateVolumeControl()
+    {
+        _updatingVolume = true;
+        _overlay.VolumeSlider.Value = _active?.Playback.Volume ?? S.Volume;
+        _updatingVolume = false;
+        UpdateMuteIcon();
+    }
+
+    void SetTabMuted(ChannelTab tab, bool muted)
+    {
+        tab.Playback.Muted = muted;
+        S.MutedTabs.RemoveAll(login => login.Equals(tab.Login, StringComparison.OrdinalIgnoreCase));
+        if (muted) S.MutedTabs.Add(tab.Login);
+        Settings.Save();
+    }
+
+    void ToggleTabMute(ChannelTab tab)
+    {
+        if (!_tabs.Contains(tab)) return;
+        SetTabMuted(tab, !tab.Playback.Muted);
+        ApplyTabAudio(tab);
+        if (tab == _active)
+        {
+            UpdateMuteIcon();
+            ShowPlayerOverlay();
+        }
+    }
+
+    MpvPlayer? EnsurePlayer(ChannelTab tab)
+    {
+        var playback = tab.Playback;
+        if (playback.Player != null)
+        {
+            ApplyTabAudio(tab);
+            return playback.Player;
+        }
         try
         {
-            _host = new VideoHost(_hwnd);
-            _host.Input += OnVideoInput;
-            _player = new MpvPlayer(_host.Hwnd, S.LowLatency);
-            _player.SetVolume(S.Volume);
-            _player.SetMuted(S.Muted);
-            _player.StateChanged += s => _dispatcher.TryEnqueue(() => OnPlayerState(s));
-            _player.Input += cmd => _dispatcher.TryEnqueue(() => OnVideoInput(cmd));
-            return _player;
+            playback.Host = new VideoHost(_hwnd);
+            playback.Host.Input += cmd => OnTabVideoInput(tab, cmd);
+            playback.Player = new MpvPlayer(playback.Host.Hwnd, S.LowLatency);
+            playback.Player.SetMuted(true);
+            playback.Player.SetVolume(playback.Volume);
+            playback.Player.StateChanged += s => _dispatcher.TryEnqueue(() =>
+            {
+                if (s != PlayerState.Idle && !playback.Resolving && playback.Player?.State == s) OnPlayerState(tab, s);
+            });
+            playback.Player.Input += cmd => _dispatcher.TryEnqueue(() => OnTabVideoInput(tab, cmd));
+            ApplyTabAudio(tab);
+            return playback.Player;
         }
         catch (Exception ex)
         {
             Log.Error("Player init", ex);
-            ShowVideoMessage("The video player failed to start. Is libmpv-2.dll next to Glint.exe?", null, retry: false);
+            playback.Host?.Dispose();
+            playback.Host = null;
+            playback.ErrorMessage = "The video player failed to start. Is libmpv-2.dll next to Glint.exe?";
+            OnPlayerState(tab, PlayerState.Error);
             return null;
         }
     }
@@ -103,21 +152,26 @@ public sealed partial class MainWindow
 
     void StopPlayback()
     {
-        _playVersion++;
         _vodTimer.Stop();
-        _ads?.Stop();
-        _player?.Stop();
-        _playerState = PlayerState.Idle;
+        foreach (var tab in _tabs)
+        {
+            if (tab.Vod != null && tab.Playback.Player?.TimePos is { } pos) tab.VodPosition = pos;
+            tab.Playback.Stop();
+        }
         UpdateVideoBounds();
     }
 
     async Task PlayAsync(ChannelTab tab)
     {
-        int version = ++_playVersion;
-        _vodTimer.Stop();
-        if (S.ChatOnly) { _player?.Stop(); return; }
+        if (_closing || !_tabs.Contains(tab) || S.ChatOnly) return;
+        var playback = tab.Playback;
+        int version = ++playback.Version;
+        playback.Started = true;
+        playback.Resolving = true;
+        playback.ErrorMessage = null;
+        if (tab == _active && !MultiviewActive) _vodTimer.Stop();
+        OnPlayerState(tab, PlayerState.Loading);
 
-        ShowVideoMessage(null, null, retry: false, loading: true);
         List<StreamVariant> variants;
         try { variants = await TwitchGql.GetStreamVariantsAsync(tab.Login); }
         catch (Exception ex)
@@ -125,69 +179,96 @@ public sealed partial class MainWindow
             Log.Error("Stream variants", ex);
             variants = new();
         }
-        if (version != _playVersion || tab != _active) return;
+        if (_closing || !_tabs.Contains(tab) || version != playback.Version) return;
+        playback.Resolving = false;
 
-        SetQualityItems(variants);
+        playback.Variants = variants;
+        playback.SelectedVariant = PickVariant(variants);
+        if (tab == _active) SetQualityItems();
         if (variants.Count == 0)
         {
-            _ads?.Stop();
-            _player?.Stop();
-            _playerState = PlayerState.Idle;
-            if (tab.Entry.Known) ShowVideoMessage($"{tab.Entry.DisplayName} is offline", tab.Entry.Avatar, retry: true, vods: true);
-            else ShowVideoMessage("Couldn't load the stream", null, retry: true);
-            UpdateVideoBounds();
+            playback.Ads?.Stop();
+            playback.Player?.Stop();
+            OnPlayerState(tab, PlayerState.Idle);
             return;
         }
-        LoadLive(tab, _selectedVariant!);
+        LoadLive(tab, playback.SelectedVariant!);
     }
 
-    void LoadLive(ChannelTab tab, StreamVariant variant)
+    void LoadLive(ChannelTab tab, StreamVariant variant) => _ = LoadLiveSafelyAsync(tab, variant);
+
+    async Task LoadLiveSafelyAsync(ChannelTab tab, StreamVariant variant)
     {
-        var player = EnsurePlayer();
+        try { await LoadLiveAsync(tab, variant); }
+        catch (Exception ex)
+        {
+            if (_closing || !_tabs.Contains(tab)) return;
+            Log.Error("Live playback", ex);
+            tab.Playback.ErrorMessage = "Couldn't load the stream";
+            OnPlayerState(tab, PlayerState.Error);
+        }
+    }
+
+    async Task LoadLiveAsync(ChannelTab tab, StreamVariant variant)
+    {
+        var player = EnsurePlayer(tab);
         if (player == null) return;
-        _playerState = PlayerState.Loading;
-        _adBreak = false;
+        var playback = tab.Playback;
+        int version = ++playback.Version;
+        playback.Ads?.Stop();
+        player.Stop();
+        playback.AdStatus = AdSkipStatus.None;
+        OnPlayerState(tab, PlayerState.Loading);
         if (S.BlockAds)
         {
-            if (_ads == null)
+            if (playback.Ads == null)
             {
-                _ads = new AdSkipper();
-                _ads.AdBreakChanged += on => _dispatcher.TryEnqueue(() => { _adBreak = on; UpdateInfoMeta(); });
+                playback.Ads = new AdSkipper();
+                playback.Ads.StatusChanged += () => _dispatcher.TryEnqueue(() =>
+                {
+                    if (_closing || !_tabs.Contains(tab)) return;
+                    playback.AdStatus = playback.Ads.Status;
+                    if (tab == _active) { UpdateInfoMeta(); RenderPlayerState(); }
+                    foreach (var slot in _multiviewSlots.Where(s => s.Tab == tab)) UpdateMultiviewSlotStatus(slot);
+                    UpdateVideoBounds();
+                });
             }
-            player.Load(_ads.Start(tab.Login, variant));
+            var url = await playback.Ads.StartAsync(tab.Login, variant);
+            if (url == null || _closing || !_tabs.Contains(tab) || version != playback.Version) return;
+            player.Load(url);
         }
         else
         {
-            _ads?.Stop();
+            playback.Ads?.Stop();
             player.Load(variant.Url);
         }
-        UpdateVideoBounds();
+        if (tab == _active) UpdateVideoBounds();
     }
 
-    void SetQualityItems(List<StreamVariant> variants)
+    void SetQualityItems()
     {
-        _variants = variants;
-        _selectedVariant = PickVariant(variants);
+        var tab = _active;
+        var playback = tab?.Playback;
         var menu = new MenuFlyout();
         TrackFlyout(menu);
-        foreach (var variant in _variants)
+        foreach (var variant in playback?.Variants ?? new())
         {
-            var item = new RadioMenuFlyoutItem { Text = variant.Name, GroupName = "Quality", IsChecked = variant == _selectedVariant };
+            var item = new RadioMenuFlyoutItem { Text = variant.Name, GroupName = "Quality", IsChecked = variant == playback!.SelectedVariant };
             item.Click += (_, _) =>
             {
-                if (_active == null) return;
-                _selectedVariant = variant;
+                if (tab == null || tab != _active) return;
+                playback!.SelectedVariant = variant;
                 _overlay.QualityText.Text = variant.Name;
                 S.PreferredQuality = variant.IsSource ? "Source" : variant.Name;
                 Settings.Save();
-                if (_active.Vod != null) LoadVod(variant, _player?.TimePos);
-                else LoadLive(_active, variant);
+                if (tab.Vod != null) LoadVod(tab, variant, _player?.TimePos);
+                else LoadLive(tab, variant);
             };
             menu.Items.Add(item);
         }
         _overlay.QualityButton.Flyout = menu;
-        _overlay.QualityButton.IsEnabled = variants.Count > 0;
-        _overlay.QualityText.Text = _selectedVariant?.Name ?? "Quality";
+        _overlay.QualityButton.IsEnabled = playback?.Variants.Count > 0;
+        _overlay.QualityText.Text = playback?.SelectedVariant?.Name ?? "Quality";
     }
 
     static StreamVariant? PickVariant(List<StreamVariant> variants)
@@ -199,12 +280,32 @@ public sealed partial class MainWindow
                ?? variants.FirstOrDefault(v => v.IsSource) ?? variants[0];
     }
 
-    void OnPlayerState(PlayerState s)
+    void OnPlayerState(ChannelTab tab, PlayerState s)
     {
-        if (_closing) return;
-        _playerState = s;
-        switch (s)
+        if (_closing || !_tabs.Contains(tab)) return;
+        tab.Playback.State = s;
+        foreach (var slot in _multiviewSlots.Where(slot => slot.Tab == tab)) UpdateMultiviewSlotStatus(slot);
+        if (MultiviewActive) UpdateVideoBounds();
+        if (tab != _active) return;
+        RenderPlayerState();
+    }
+
+    void RenderPlayerState()
+    {
+        if (_closing || _active is not { } tab) return;
+        if (tab.Playback.AdStatus == AdSkipStatus.Waiting)
         {
+            ShowVideoMessage("Waiting for stream after ads", null, retry: false, loading: true);
+            UpdateInfoMeta();
+            UpdateVideoBounds();
+            return;
+        }
+        switch (_playerState)
+        {
+            case PlayerState.Idle:
+                if (tab.Entry.Known) ShowVideoMessage($"{tab.Entry.DisplayName} is offline", tab.Entry.Avatar, retry: true, vods: true);
+                else ShowVideoMessage("Couldn't load the stream", null, retry: true);
+                break;
             case PlayerState.Loading:
                 ShowVideoMessage(null, null, retry: false, loading: true);
                 break;
@@ -220,7 +321,7 @@ public sealed partial class MainWindow
                 if (_active != null) ShowVideoMessage($"{_active.Entry.DisplayName}'s stream ended", _active.Entry.Avatar, retry: true, vods: true);
                 break;
             case PlayerState.Error:
-                ShowVideoMessage("Couldn't play this", _active?.Entry.Avatar, retry: true);
+                ShowVideoMessage(tab.Playback.ErrorMessage ?? "Couldn't play this", tab.Entry.Avatar, retry: true);
                 break;
         }
         UpdateInfoMeta();
@@ -259,18 +360,16 @@ public sealed partial class MainWindow
     void UpdateVideoBounds()
     {
         if (_closing) return;
-        bool visible = _host != null && !IsIconic(_hwnd) && !_dialogOpen && !_vodPanelOpen && _active != null && !S.ChatOnly
+        if (MultiviewActive) { UpdateMultiviewVideoBounds(); return; }
+        foreach (var tab in _tabs) if (tab != _active) tab.Playback.Host?.Hide();
+        bool visible = _host != null && !IsIconic(_hwnd) && !_dialogOpen && !_vodPanelOpen && _videoPopups.Count == 0 && _active != null && _active.Playback.AdStatus != AdSkipStatus.Waiting && !S.ChatOnly
                        && MainArea.Visibility == Visibility.Visible
                        && _playerState is PlayerState.Playing or PlayerState.Buffering
                        && VideoArea.ActualWidth > 0 && Root.XamlRoot != null;
         if (!visible)
         {
-            _host?.SetBounds(0, 0, 0, 0, false);
-            _overlayAvailable = false;
-            _overlayTimer.Stop();
-            _overlay.QualityButton.Flyout?.Hide();
-            _overlay.SpeedButton.Flyout?.Hide();
-            _overlay.HideOverlay(immediately: true);
+            _host?.Hide();
+            HidePlayerOverlay();
             return;
         }
         var scale = Root.XamlRoot!.RasterizationScale;
@@ -278,8 +377,26 @@ public sealed partial class MainWindow
         int x = (int)Math.Round(pt.X * scale), y = (int)Math.Round(pt.Y * scale);
         int width = (int)Math.Round(VideoArea.ActualWidth * scale), height = (int)Math.Round(VideoArea.ActualHeight * scale);
         _host!.SetBounds(x, y, width, height, true);
-        int overlayHeight = Math.Min(height, (int)Math.Round((96 + (_active?.Vod != null ? 24 : 0) + (_fullscreen || S.Theatre ? 44 : 0)) * scale));
-        var screen = new NativePoint { X = x, Y = y + height - overlayHeight };
+        PlacePlayerOverlay(VideoArea);
+    }
+
+    void HidePlayerOverlay()
+    {
+        _overlayAvailable = false;
+        _overlayTimer.Stop();
+        _overlay.QualityButton.Flyout?.Hide();
+        _overlay.SpeedButton.Flyout?.Hide();
+        _overlay.HideOverlay(immediately: true);
+    }
+
+    void PlacePlayerOverlay(FrameworkElement area)
+    {
+        var scale = Root.XamlRoot!.RasterizationScale;
+        _overlay.ConfigureForWidth(area.ActualWidth);
+        var point = area.TransformToVisual(Root).TransformPoint(new Point());
+        int width = (int)Math.Round(area.ActualWidth * scale), height = (int)Math.Round(area.ActualHeight * scale);
+        int overlayHeight = Math.Min(height, (int)Math.Round((96 + (_overlay.IsCompact ? 38 : 0) + (_active?.Vod != null ? 24 : 0) + (!MultiviewActive && (_fullscreen || S.Theatre) ? 44 : 0)) * scale));
+        var screen = new NativePoint { X = (int)Math.Round(point.X * scale), Y = (int)Math.Round(point.Y * scale) + height - overlayHeight };
         if (!ClientToScreen(_hwnd, ref screen)) return;
         _overlay.Place(screen.X, screen.Y, width, overlayHeight);
         bool wasAvailable = _overlayAvailable;
@@ -289,11 +406,7 @@ public sealed partial class MainWindow
 
     void ToggleMute()
     {
-        S.Muted = !S.Muted;
-        _player?.SetMuted(S.Muted);
-        UpdateMuteIcon();
-        Settings.Save();
-        ShowPlayerOverlay();
+        if (_active is { } tab) ToggleTabMute(tab);
     }
 
     void TogglePause()
@@ -304,8 +417,12 @@ public sealed partial class MainWindow
         ShowPlayerOverlay();
     }
 
-    void UpdateMuteIcon() =>
-        _overlay.MuteButton.Content = S.Muted || S.Volume == 0 ? "" : S.Volume < 40 ? "" : "";
+    void UpdateMuteIcon()
+    {
+        var playback = _active?.Playback;
+        _overlay.MuteButton.Content = playback == null || playback.Muted || playback.Volume == 0
+            ? "\uE74F" : playback.Volume < 40 ? "\uE993" : "\uE767";
+    }
 
     void ToggleFullscreen()
     {
@@ -313,6 +430,7 @@ public sealed partial class MainWindow
         _fullscreen = !_fullscreen;
         AppWindow.SetPresenter(_fullscreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped);
         ApplyLayoutSettings();
+        FocusMultiviewPlayer();
         ShowPlayerOverlay();
     }
 
@@ -330,12 +448,22 @@ public sealed partial class MainWindow
             ApplyLayoutSettings();
         }
         Settings.Save();
+        FocusMultiviewPlayer();
         ShowPlayerOverlay();
     }
 
     void ToggleChat()
     {
-        if (_fullscreen) S.FullscreenChat = !S.FullscreenChat;
+        if (MultiviewActive && S.MultiviewChats == "Hidden")
+        {
+            S.MultiviewChats = "Each stream";
+            _multiviewUpdating = true;
+            MultiviewChatMode.SelectedItem = S.MultiviewChats;
+            _multiviewUpdating = false;
+            if (_fullscreen) S.FullscreenChat = true;
+            else S.ChatHidden = false;
+        }
+        else if (_fullscreen) S.FullscreenChat = !S.FullscreenChat;
         else if (S.ChatOnly)
         {
             S.ChatHidden = true;
@@ -344,6 +472,7 @@ public sealed partial class MainWindow
         else S.ChatHidden = !S.ChatHidden;
         Settings.Save();
         ApplyLayoutSettings();
+        FocusMultiviewPlayer();
         ShowPlayerOverlay();
     }
 
@@ -361,11 +490,11 @@ public sealed partial class MainWindow
             ? new SolidColorBrush(Windows.UI.Color.FromArgb(64, 255, 255, 255)) : null;
         ToolTipService.SetToolTip(_overlay.TheatreButton, S.Theatre && !_fullscreen ? "Exit theatre (T)" : "Theatre mode (T)");
         AutomationProperties.SetName(_overlay.TheatreButton, S.Theatre && !_fullscreen ? "Exit theatre mode" : "Theatre mode");
-        _overlay.ChatButton.Opacity = ChatShown ? 1 : 0.7;
+        _overlay.ChatButton.Opacity = (MultiviewActive ? MultiviewChatShown : ChatShown) ? 1 : 0.7;
         _overlay.LiveBadge.Visibility = !vod && tab?.Entry.IsLive == true ? Visibility.Visible : Visibility.Collapsed;
         _overlay.GoLiveButton.Visibility = vod && tab?.Entry.IsLive == true ? Visibility.Visible : Visibility.Collapsed;
         _overlay.Seek.Visibility = _overlay.SpeedButton.Visibility = vod ? Visibility.Visible : Visibility.Collapsed;
-        _overlay.TitlePanel.Visibility = _fullscreen || S.Theatre ? Visibility.Visible : Visibility.Collapsed;
+        _overlay.TitlePanel.Visibility = !MultiviewActive && (_fullscreen || S.Theatre) ? Visibility.Visible : Visibility.Collapsed;
         _overlay.TitleText.Text = tab?.Entry.DisplayName ?? "";
         _overlay.SubtitleText.Text = tab?.Vod?.Title ?? tab?.Entry.Stream?.Title ?? "";
     }
@@ -383,9 +512,12 @@ public sealed partial class MainWindow
 
     void SetChatOnly(bool on)
     {
+        SaveChatDraft();
         S.ChatOnly = on;
         Settings.Save();
         ApplyLayoutSettings();
+        RestoreChatDraft();
+        UpdateChatInput();
         if (on) StopPlayback();
         else Reload();
         UpdateVideoBounds();

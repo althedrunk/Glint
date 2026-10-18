@@ -7,18 +7,44 @@ public sealed partial class MainWindow
 {
     List<string>? _completions;
     int _completionIndex, _completionStart, _completionEnd;
+    bool _updatingDraft;
+    ChannelTab? ChatTarget => MultiviewActive ? _multiviewRecipient : _active;
+
+    void SaveChatDraft()
+    {
+        if (!_updatingDraft && ChatTarget is { } tab) tab.Draft = ChatInput.Text;
+    }
+
+    void RestoreChatDraft()
+    {
+        _updatingDraft = true;
+        ChatInput.Text = ChatTarget?.Draft ?? "";
+        ChatInput.SelectionStart = ChatInput.Text.Length;
+        _updatingDraft = false;
+        _completions = null;
+    }
+
+    void SetChatRecipient(ChannelTab tab)
+    {
+        if (!_tabs.Contains(tab) || _multiviewRecipient == tab) return;
+        SaveChatDraft();
+        _multiviewRecipient = tab;
+        MultiviewRecipient.SelectedItem = tab;
+        RestoreChatDraft();
+        UpdateChatInput();
+    }
 
     void UpdateChatInput()
     {
-        if (_active?.Vod != null)
+        if (ChatTarget?.Vod != null)
         {
             ChatInput.IsEnabled = false;
             ChatInput.PlaceholderText = "Chat replay";
             return;
         }
-        bool canChat = _irc.IsAuthenticated && _active != null;
+        bool canChat = _irc.IsAuthenticated && ChatTarget != null;
         ChatInput.IsEnabled = canChat;
-        ChatInput.PlaceholderText = canChat ? "Send a message" : "Log in to chat";
+        ChatInput.PlaceholderText = canChat ? $"Message #{ChatTarget!.Login}" : "Log in to chat";
     }
 
     void ChatInput_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
@@ -39,7 +65,7 @@ public sealed partial class MainWindow
     // Tab cycles through emotes (or @names) starting with the word under the caret, like Chatterino.
     void Complete(bool backwards)
     {
-        if (_active == null) return;
+        if (ChatTarget is not { } target) return;
         var text = ChatInput.Text;
         if (_completions == null)
         {
@@ -52,14 +78,14 @@ public sealed partial class MainWindow
             if (prefix.StartsWith('@'))
             {
                 var p = prefix[1..];
-                candidates = _active.Chat.Chatters().Where(c => c.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+                candidates = target.Chat.Chatters().Where(c => c.StartsWith(p, StringComparison.OrdinalIgnoreCase))
                     .OrderBy(c => c, StringComparer.OrdinalIgnoreCase).Select(c => "@" + c);
             }
             else
             {
-                candidates = _active.Chat.Emotes.All.Select(e => e.Name)
+                candidates = target.Chat.Emotes.All.Select(e => e.Name)
                     .Where(n => n.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    .Concat(_active.Chat.Chatters().Where(c => c.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                    .Concat(target.Chat.Chatters().Where(c => c.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
                     .Distinct()
                     .OrderByDescending(n => n.StartsWith(prefix, StringComparison.Ordinal))
                     .ThenBy(n => n.Length).ThenBy(n => n, StringComparer.Ordinal);
@@ -83,15 +109,16 @@ public sealed partial class MainWindow
 
     async void ChatInput_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key != VirtualKey.Enter || _active == null) return;
+        if (e.Key != VirtualKey.Enter || ChatTarget is not { } target || target.Vod != null) return;
         e.Handled = true;
         var text = ChatInput.Text.Trim();
         if (text.Length == 0 || !_irc.IsAuthenticated) return;
         ChatInput.Text = "";
-        var chat = _active.Chat;
-        await _irc.SendMessageAsync(_active.Login, text);
+        var chat = target.Chat;
+        await _irc.SendMessageAsync(target.Login, text);
         // Twitch doesn't echo your own messages back, so add it locally (commands other than /me aren't messages).
         if (!text.StartsWith('/') || text.StartsWith("/me ")) chat.AddLocalEcho(text);
-        Chat.ScrollToBottom();
+        if (MultiviewActive && _multiviewChats.TryGetValue(target, out var pane)) pane.View.ScrollToBottom();
+        else if (target == _active) Chat.ScrollToBottom();
     }
 }

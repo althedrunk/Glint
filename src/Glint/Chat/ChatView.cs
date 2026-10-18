@@ -62,7 +62,7 @@ sealed class MessageLayout
 
 // GPU-drawn chat. Messages are laid out once (DirectWrite) and cached; only the visible window is drawn,
 // bottom-anchored so trimming old messages never moves the view.
-public sealed partial class ChatView : UserControl
+public sealed partial class ChatView : UserControl, IDisposable
 {
     const float PadX = 10, PadY = 3, BadgeSize = 18, EmoteFallback = 28;
 
@@ -83,6 +83,7 @@ public sealed partial class ChatView : UserControl
     bool _hooked, _lastDrawAnimated, _needsFrame;
     long _lastTick, _lastDraw;
     int _wakePending;
+    volatile bool _listening, _disposed;
 
     Point? _pointer;
     Rect _pillRect;
@@ -103,14 +104,55 @@ public sealed partial class ChatView : UserControl
         PointerMoved += OnPointerMoved;
         PointerExited += (_, _) => { _pointer = null; _canvas.Invalidate(); };
         PointerPressed += OnPointerPressed;
-        SizeChanged += (_, _) => _canvas.Invalidate();
+        _canvas.SizeChanged += (_, _) => { _needsFrame = true; RequestFrame(); _canvas.Invalidate(); };
 
-        ImageCache.ImageLoaded += () => Wake(invalidateLayout: false);
-        ImageCache.SizeDiscovered += () => { Interlocked.Increment(ref _layoutVersion); Wake(invalidateLayout: false); };
+        Loaded += (_, _) =>
+        {
+            if (_disposed || _listening) return;
+            _listening = true;
+            ImageCache.ImageLoaded += OnImageLoaded;
+            ImageCache.SizeDiscovered += OnImageSizeDiscovered;
+            if (_channel != null) _channel.Updated += OnChannelUpdated;
+            _needsFrame = true;
+            RequestFrame();
+        };
+        Unloaded += (_, _) => Detach();
+    }
+
+    void OnImageLoaded() => Wake(false);
+
+    void OnImageSizeDiscovered()
+    {
+        Interlocked.Increment(ref _layoutVersion);
+        Wake(false);
+    }
+
+    void Detach()
+    {
+        _listening = false;
+        ImageCache.ImageLoaded -= OnImageLoaded;
+        ImageCache.SizeDiscovered -= OnImageSizeDiscovered;
+        if (_channel != null) _channel.Updated -= OnChannelUpdated;
+        if (_hooked) CompositionTarget.Rendering -= OnRendering;
+        _hooked = false;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        Detach();
+        _channel = null;
+        _canvas.Draw -= OnDraw;
+        Content = null;
+        _canvas.RemoveFromVisualTree();
+        _format.Dispose(); _smallFormat.Dispose(); _tipTitleFormat.Dispose(); _pillFormat.Dispose();
     }
 
     public void RebuildFormats()
     {
+        if (_disposed) return;
+        _format?.Dispose(); _smallFormat?.Dispose(); _tipTitleFormat?.Dispose(); _pillFormat?.Dispose();
         var size = (float)Settings.Current.ChatFontSize;
         _format = new CanvasTextFormat
         {
@@ -151,6 +193,7 @@ public sealed partial class ChatView : UserControl
 
     public void SetChannel(ChatChannel? channel)
     {
+        _lastDrawAnimated = false;
         if (_channel != null) _channel.Updated -= OnChannelUpdated;
         _channel = channel;
         _scroll = _target = 0;
@@ -158,7 +201,7 @@ public sealed partial class ChatView : UserControl
         _pointer = null;
         if (channel != null)
         {
-            channel.Updated += OnChannelUpdated;
+            if (_listening) channel.Updated += OnChannelUpdated;
             channel.Drain();
         }
         RequestFrame();
@@ -176,10 +219,12 @@ public sealed partial class ChatView : UserControl
     // Thread-safe nudge: coalesces many background events into one UI-thread frame request.
     void Wake(bool invalidateLayout)
     {
+        if (_disposed || !_listening) return;
         if (Interlocked.Exchange(ref _wakePending, 1) == 1) return;
         _dispatcher.TryEnqueue(() =>
         {
             _wakePending = 0;
+            if (_disposed || !_listening) return;
             _needsFrame = true;
             RequestFrame();
         });
@@ -187,7 +232,7 @@ public sealed partial class ChatView : UserControl
 
     void RequestFrame()
     {
-        if (_hooked) return;
+        if (_disposed || !_listening || _hooked) return;
         _hooked = true;
         _lastTick = _clock.ElapsedMilliseconds;
         CompositionTarget.Rendering += OnRendering;

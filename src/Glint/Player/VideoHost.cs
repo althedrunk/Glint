@@ -56,6 +56,8 @@ public sealed partial class VideoHost : IDisposable
             SWP_NOACTIVATE | (visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
     }
 
+    public void Hide() => SetBounds(_bounds.X, _bounds.Y, _bounds.W, _bounds.H, false);
+
     // Re-asserts z-order above the XAML island without moving.
     public void BringToTop()
     {
@@ -70,6 +72,7 @@ public sealed partial class VideoHost : IDisposable
             switch (msg)
             {
                 case 0x0200: host.Input?.Invoke("move"); break;
+                case 0x0201: host.Input?.Invoke("click"); break;
                 case 0x0203: host.Input?.Invoke("dblclick"); return IntPtr.Zero;
                 case 0x020A:
                     host.Input?.Invoke((short)(wParam.ToInt64() >> 16) > 0 ? "wheel 1" : "wheel -1");

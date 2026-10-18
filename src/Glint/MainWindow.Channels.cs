@@ -1,6 +1,9 @@
 using Glint.Chat;
+using Glint.Player;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
@@ -18,6 +21,11 @@ sealed class ChannelTab
     public ChatChannel Chat { get; }
     public string Login => Entry.Login;
     public TabViewItem Item { get; set; } = null!;
+    public TabPlayback Playback { get; } = new();
+    public TextBlock HeaderText { get; } = new() { TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+    public Button AudioButton { get; } = new();
+    public string Draft { get; set; } = "";
+    public override string ToString() => Entry.DisplayName;
 
     // VOD state. Vod == null means we're watching live.
     public VideoInfo? Vod { get; set; }
@@ -51,7 +59,8 @@ public sealed partial class MainWindow
             if (_tabs.FirstOrDefault(t => t.Entry == entry) is not { } tab) continue;
             UpdateTabHeader(tab);
             // if you're sat on an offline channel and it goes live, just start it
-            if (tab == _active && tab.Vod == null && !wasLive && entry.IsLive && _playerState is Player.PlayerState.Idle or Player.PlayerState.Ended or Player.PlayerState.Error)
+            if (!S.ChatOnly && (tab == _active || tab.Playback.Started) && tab.Vod == null && !wasLive && entry.IsLive &&
+                tab.Playback.State is PlayerState.Idle or PlayerState.Ended or PlayerState.Error)
                 _ = PlayAsync(tab);
         }
         RebuildSidebar();
@@ -143,7 +152,18 @@ public sealed partial class MainWindow
         var chat = new ChatChannel(login) { SelfLogin = _irc.IsAuthenticated ? S.UserLogin : null };
         _chats[login] = chat;
         var tab = new ChannelTab(entry, chat);
+        tab.Playback.Volume = S.Volume;
+        tab.Playback.Muted = S.MutedTabs.Contains(login, StringComparer.OrdinalIgnoreCase);
         tab.Item = new TabViewItem { Tag = tab };
+        var header = new Grid { ColumnSpacing = 6 };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        tab.AudioButton.Style = (Style)Root.Resources["TabAudioButton"];
+        tab.AudioButton.Click += (_, _) => ToggleTabMute(tab);
+        Grid.SetColumn(tab.AudioButton, 1);
+        header.Children.Add(tab.HeaderText);
+        header.Children.Add(tab.AudioButton);
+        tab.Item.Header = header;
         UpdateTabHeader(tab);
         _tabs.Add(tab);
         Tabs.TabItems.Add(tab.Item);
@@ -151,6 +171,7 @@ public sealed partial class MainWindow
         _ = InitChannelAsync(tab);
         if (activate || Tabs.SelectedItem == null) Tabs.SelectedItem = tab.Item;
         UpdateEmptyState();
+        RefreshMultiviewChoices();
         SaveTabs();
     }
 
@@ -159,6 +180,7 @@ public sealed partial class MainWindow
         if (!tab.Entry.Known)
         {
             var infos = await TwitchGql.GetUsersAsync(new[] { tab.Login });
+            if (_closing || !_tabs.Contains(tab)) return;
             if (infos.Count == 0)
             {
                 tab.Chat.AddSystem($"There's no channel called \"{tab.Login}\"");
@@ -175,31 +197,55 @@ public sealed partial class MainWindow
 
     void UpdateTabHeader(ChannelTab tab)
     {
-        tab.Item.Header = tab.Entry.DisplayName;
+        tab.HeaderText.Text = tab.Entry.DisplayName;
+        AutomationProperties.SetName(tab.Item, tab.Entry.DisplayName);
+        UpdateTabAudioButton(tab);
         if (tab.Entry.Avatar is { } av && tab.Item.IconSource is not ImageIconSource)
             tab.Item.IconSource = new ImageIconSource { ImageSource = av };
         ToolTipService.SetToolTip(tab.Item, tab.Entry.Tooltip);
+        RefreshMultiviewChoices();
+    }
+
+    void UpdateTabAudioButton(ChannelTab tab)
+    {
+        tab.AudioButton.Content = tab.Playback.Muted || tab.Playback.Volume == 0 ? "\uE74F" : "\uE767";
+        string action = tab.Playback.Muted ? "Unmute" : "Mute";
+        AutomationProperties.SetName(tab.AudioButton, $"{action} {tab.Entry.DisplayName}");
+        ToolTipService.SetToolTip(tab.AudioButton, $"{action} {tab.Entry.DisplayName}");
+        UpdateMultiviewAudio(tab);
     }
 
     void CloseTab(ChannelTab tab)
     {
         int index = _tabs.IndexOf(tab);
+        if (index < 0) return;
+        bool active = tab == _active;
+        bool recipient = tab == ChatTarget;
+        SaveChatDraft();
+        if (active)
+        {
+            _active = null;
+            _vodTimer.Stop();
+        }
         _tabs.Remove(tab);
+        CloseMultiviewTab(tab);
+        tab.Playback.Dispose();
         Tabs.TabItems.Remove(tab.Item);
         _irc.Part(tab.Login);
         _chats.TryRemove(tab.Login, out _);
         if (tab.Chat.Emotes.SevenTvSetId is { } set) _stv.Unsubscribe(set);
-        if (tab == _active)
+        if (active && _active == null)
         {
-            _active = null;
             if (_tabs.Count > 0) Tabs.SelectedItem = _tabs[Math.Min(index, _tabs.Count - 1)].Item;
             else
             {
-                StopPlayback();
                 Chat.SetChannel(null);
             }
         }
         UpdateEmptyState();
+        RefreshMultiviewChoices();
+        if (MultiviewActive) ApplyMultiviewLayout();
+        if (recipient) { RestoreChatDraft(); UpdateChatInput(); }
         SaveTabs();
     }
 
@@ -219,16 +265,33 @@ public sealed partial class MainWindow
 
     void ActivateTab(ChannelTab tab)
     {
-        if (_active == tab) return;
+        if (_closing || _active == tab || !_tabs.Contains(tab)) return;
+        SaveChatDraft();
         if (_active?.Vod != null && _player?.TimePos is { } pos) _active.VodPosition = pos;
+        _overlay.QualityButton.Flyout?.Hide();
+        _overlay.SpeedButton.Flyout?.Hide();
+        _seekDragging = false;
+        _vodTimer.Stop();
         CloseVodPanel();
+        _host?.Hide();
         _active = tab;
+        FocusMultiviewTab(tab);
+        UpdateVolumeControl();
         SaveTabs();
-        Chat.SetChannel(tab.Replay ?? tab.Chat);
+        RefreshChatViews();
+        SetQualityItems();
+        UpdateSpeedItems();
         UpdateInfoBar();
         UpdateChatInput();
+        RestoreChatDraft();
         UpdateModeUi();
-        if (tab.Vod != null) _ = PlayVodAsync(tab, tab.Vod, tab.VodPosition);
+        if (S.ChatOnly) return;
+        if (tab.Playback.Started)
+        {
+            RenderPlayerState();
+            if (tab.Vod != null) { VodTick(); _vodTimer.Start(); }
+        }
+        else if (tab.Vod != null) _ = PlayVodAsync(tab, tab.Vod, tab.VodPosition);
         else _ = PlayAsync(tab);
     }
 
@@ -262,13 +325,15 @@ public sealed partial class MainWindow
             return;
         }
         var up = DateTimeOffset.UtcNow - s.StartedAt;
-        _overlay.StatusText.Text = Join($"{s.Viewers:N0} viewers",
+        string? adStatus = tab.Playback.AdStatus == AdSkipStatus.Waiting ? "Waiting for stream after ads" :
+            tab.Playback.AdStatus == AdSkipStatus.AlternateStream ? "Alternate stream during ads" : null;
+        _overlay.StatusText.Text = Join(adStatus, $"{s.Viewers:N0} viewers",
             up > TimeSpan.Zero && up < TimeSpan.FromDays(7) ? $"{(int)up.TotalHours}:{up.Minutes:00}:{up.Seconds:00}" : null);
         InfoMeta.Text = Join(
             s.Game,
             $"{s.Viewers:N0} viewers",
             up > TimeSpan.Zero && up < TimeSpan.FromDays(7) ? $"{(int)up.TotalHours}:{up.Minutes:00}:{up.Seconds:00}" : null,
-            _adBreak ? "skipping ads" : _playerState == Player.PlayerState.Buffering ? "buffering" : null);
+            adStatus ?? (_playerState == PlayerState.Buffering ? "buffering" : null));
     }
 
     static string Join(params string?[] parts) => string.Join("  ·  ", parts.Where(p => !string.IsNullOrEmpty(p)));

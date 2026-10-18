@@ -20,6 +20,13 @@
                 <Setter Property="FontSize" Value="15" />
             </Style>
 
+            <Style x:Key="TabAudioButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+                <Setter Property="Width" Value="24" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="AllowFocusOnInteraction" Value="False" />
+            </Style>
+
             <DataTemplate x:Key="ChannelExpanded" x:DataType="local:ChannelEntry">
                 <Grid Padding="2,6" ColumnSpacing="10" Background="Transparent"
                       Opacity="{x:Bind ItemOpacity, Mode=OneWay}"
@@ -190,22 +197,7 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <Grid x:Name="VodPanel" Visibility="Collapsed" Background="#FF0F0F12" Padding="22,16,10,0" RowSpacing="12">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <Grid>
-                            <TextBlock x:Name="VodPanelTitle" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            <Button x:Name="VodPanelClose" AutomationProperties.Name="Close videos" Style="{StaticResource IconButton}" Content="&#xE711;"
-                                    HorizontalAlignment="Right" ToolTipService.ToolTip="Back" />
-                        </Grid>
-                        <GridView x:Name="VodGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
-                                  ItemTemplate="{StaticResource VodTemplate}" />
-                        <ProgressRing x:Name="VodSpinner" Grid.Row="1" Width="36" Height="36" IsActive="False" />
-                        <TextBlock x:Name="VodEmpty" Grid.Row="1" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Foreground="{StaticResource GlintSubtleTextBrush}" Text="No past broadcasts. Some streamers keep them private." />
-                    </Grid>
+
                 </Grid>
 
                 <Grid x:Name="InfoBar" Grid.Row="1" Padding="14,10,10,10" ColumnSpacing="12">
@@ -243,6 +235,8 @@
                                 ToolTipService.ToolTip="Past broadcasts" />
                         <Button x:Name="ChatOnlyButton" AutomationProperties.Name="Chat only" Style="{StaticResource IconButton}" Content="&#xE8A0;"
                                 ToolTipService.ToolTip="Hide video (chat only)" />
+                        <Button x:Name="MultiviewButton" AutomationProperties.Name="Multiview" Style="{StaticResource IconButton}" Content="&#xE8A9;"
+                                ToolTipService.ToolTip="Multiview (Ctrl+Shift+M)" />
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -266,9 +260,81 @@
                                 ToolTipService.ToolTip="Show video" Visibility="Collapsed" Height="28" />
                 </Grid>
                 <chat:ChatView x:Name="Chat" Grid.Row="1" />
-                <Grid Grid.Row="2" Padding="10,6,10,10">
+                <Grid x:Name="ChatInputHost" Grid.Row="2" Padding="10,6,10,10">
                     <TextBox x:Name="ChatInput" PlaceholderText="Send a message" MaxLength="500" TextWrapping="Wrap" AcceptsReturn="False" />
                 </Grid>
+            </Grid>
+
+            <UserControl x:Name="MultiviewRoot" Grid.Column="1" Grid.ColumnSpan="3" Visibility="Collapsed" IsTabStop="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Padding="10,6" ColumnSpacing="8" Background="{StaticResource GlintPanelBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ComboBox x:Name="MultiviewCount" Width="108" AutomationProperties.Name="Stream count" />
+                            <ComboBox x:Name="MultiviewLayout" Width="128" AutomationProperties.Name="Video layout" />
+                            <Button x:Name="MultiviewOptions" Style="{StaticResource IconButton}" Content="&#xE713;" AutomationProperties.Name="Multiview options" ToolTipService.ToolTip="Chat and layout options">
+                                <Button.Flyout>
+                                    <Flyout>
+                                        <StackPanel Width="270" Spacing="12">
+                                            <ComboBox x:Name="MultiviewChatMode" Header="Chats" HorizontalAlignment="Stretch" AutomationProperties.Name="Multiview chats" />
+                                            <ComboBox x:Name="MultiviewDock" Header="Chat position" HorizontalAlignment="Stretch" AutomationProperties.Name="Chat position" />
+                                            <Button x:Name="MultiviewPins" Content="Choose pinned chats" HorizontalAlignment="Stretch" AutomationProperties.Name="Choose pinned chats" />
+                                            <Slider x:Name="MultiviewChatWidth" Header="Chat width" Minimum="260" Maximum="600" StepFrequency="10" AutomationProperties.Name="Multiview chat width" />
+                                            <Slider x:Name="MultiviewChatHeight" Header="Chat height" Minimum="140" Maximum="700" StepFrequency="10" AutomationProperties.Name="Multiview chat height" />
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                            <Button x:Name="MultiviewAdd" Style="{StaticResource IconButton}" Content="&#xE710;" AutomationProperties.Name="Add multiview channel" ToolTipService.ToolTip="Add a channel">
+                                <Button.Flyout>
+                                    <Flyout x:Name="MultiviewAddFlyout">
+                                        <TextBox x:Name="MultiviewAddBox" Width="240" PlaceholderText="Channel name or link" AutomationProperties.Name="Multiview channel name" />
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                            <Button x:Name="MultiviewRestoreGrid" Content="Back to grid" Visibility="Collapsed" AutomationProperties.Name="Back to grid" />
+                        </StackPanel>
+                        <Button x:Name="MultiviewExit" Grid.Column="1" Content="Single view" AutomationProperties.Name="Exit multiview" />
+                    </Grid>
+                    <Grid x:Name="MultiviewContent" Grid.Row="1" Margin="6">
+                        <Grid x:Name="MultiviewVideos" RowSpacing="6" ColumnSpacing="6" />
+                        <local:GripSplitter x:Name="MultiviewDivider" Background="Transparent" />
+                        <Grid x:Name="MultiviewChatDock" RowSpacing="6" ColumnSpacing="6" />
+                    </Grid>
+                    <Grid Grid.Row="2" Padding="10,4,10,10" ColumnSpacing="10" Background="{StaticResource GlintPanelBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="MultiviewRecipient" Header="Send to" HorizontalAlignment="Stretch" AutomationProperties.Name="Message recipient" />
+                        <Grid x:Name="MultiviewComposerInput" Grid.Column="1" VerticalAlignment="Bottom" />
+                    </Grid>
+                </Grid>
+            </UserControl>
+
+            <Grid x:Name="VodPanel" Grid.Column="1" Grid.ColumnSpan="3" Visibility="Collapsed" Background="#FF0F0F12" Padding="22,16,10,0" RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <TextBlock x:Name="VodPanelTitle" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <Button x:Name="VodPanelClose" AutomationProperties.Name="Close videos" Style="{StaticResource IconButton}" Content="&#xE711;"
+                            HorizontalAlignment="Right" ToolTipService.ToolTip="Back" />
+                </Grid>
+                <GridView x:Name="VodGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
+                          ItemTemplate="{StaticResource VodTemplate}" />
+                <ProgressRing x:Name="VodSpinner" Grid.Row="1" Width="36" Height="36" IsActive="False" />
+                <TextBlock x:Name="VodEmpty" Grid.Row="1" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{StaticResource GlintSubtleTextBrush}" Text="No past broadcasts. Some streamers keep them private." />
             </Grid>
 
             <Grid x:Name="EmptyState" Grid.Column="1" Grid.ColumnSpan="3" Background="#80101014" CornerRadius="8,0,0,0">

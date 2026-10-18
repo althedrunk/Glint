@@ -101,6 +101,20 @@ public sealed partial class PlayerOverlay : Window
     }
 
     public bool IsShown => _shown;
+    public bool IsCompact { get; private set; }
+
+    public void ConfigureForWidth(double width)
+    {
+        bool compact = width < 720;
+        IsCompact = compact;
+        Grid.SetRow(RightControls, compact ? 1 : 0);
+        Grid.SetColumn(RightControls, compact ? 0 : 2);
+        Grid.SetColumnSpan(RightControls, compact ? 3 : 1);
+        RightControls.HorizontalAlignment = HorizontalAlignment.Right;
+        VolumeSlider.Width = compact ? 64 : 96;
+        QualityText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        StatusText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+    }
 
     public void Place(int x, int y, int width, int height)
     {

@@ -10,4 +10,7 @@ public sealed partial class GripSplitter : Grid
     {
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
     }
+
+    public void SetVerticalResize(bool vertical) =>
+        ProtectedCursor = InputSystemCursor.Create(vertical ? InputSystemCursorShape.SizeNorthSouth : InputSystemCursorShape.SizeWestEast);
 }

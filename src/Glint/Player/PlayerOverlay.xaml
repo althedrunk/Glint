@@ -47,6 +47,10 @@
                     Visibility="Collapsed" Margin="4,0,4,-6" AutomationProperties.Name="Seek" />
 
             <Grid ColumnSpacing="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -76,7 +80,7 @@
                 <TextBlock x:Name="StatusText" x:FieldModifier="internal" Grid.Column="1" Margin="8,0"
                            VerticalAlignment="Center" FontSize="13" Foreground="#E6FFFFFF" TextTrimming="CharacterEllipsis" />
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                <StackPanel x:Name="RightControls" Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <Button x:Name="ReloadButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE72C;"
                             AutomationProperties.Name="Reload stream" ToolTipService.ToolTip="Reload (F5)" />
                     <Button x:Name="SpeedButton" x:FieldModifier="internal" Style="{StaticResource OverlayTextButton}" Content="1x" Visibility="Collapsed"
@@ -90,6 +94,8 @@
                     </Button>
                     <Button x:Name="ChatButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE8BD;"
                             AutomationProperties.Name="Toggle chat" ToolTipService.ToolTip="Chat (C)" />
+                    <Button x:Name="MultiviewButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE8A9;"
+                            AutomationProperties.Name="Multiview" ToolTipService.ToolTip="Multiview (Ctrl+Shift+M)" />
                     <Button x:Name="TheatreButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE7F4;"
                             AutomationProperties.Name="Theatre mode" ToolTipService.ToolTip="Theatre mode (T)" />
                     <Button x:Name="FullscreenButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE740;"

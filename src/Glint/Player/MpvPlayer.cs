@@ -110,8 +110,9 @@ public sealed class MpvPlayer : IDisposable
         }
 
         // Dev hook for tuning: GLINT_MPV_OPTS="name=value;name=value"
+        // Use {hwnd} in IPC pipe names when testing multiple players.
         foreach (var kv in (Environment.GetEnvironmentVariable("GLINT_MPV_OPTS") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
-            if (kv.IndexOf('=') is var eq and > 0) Opt(kv[..eq], kv[(eq + 1)..]);
+            if (kv.IndexOf('=') is var eq and > 0) Opt(kv[..eq], kv[(eq + 1)..].Replace("{hwnd}", hwnd.ToInt64().ToString()));
 
         Check(Mpv.mpv_initialize(_ctx), "mpv_initialize");
         Mpv.mpv_observe_property(_ctx, 1, Mpv.U8("paused-for-cache"), Mpv.FormatFlag);
