@@ -259,12 +259,15 @@ public sealed partial class MainWindow : Window
             switch (e.Key)
             {
                 case VirtualKey.F: ToggleFullscreen(); break;
+                case VirtualKey.T: ToggleTheatre(); break;
+                case VirtualKey.C when _fullscreen: ToggleFullscreenChat(); break;
                 case VirtualKey.M: ToggleMute(); break;
                 case VirtualKey.Space: TogglePause(); break;
                 case VirtualKey.Left when _active?.Vod != null: SeekBy(-10); break;
                 case VirtualKey.Right when _active?.Vod != null: SeekBy(10); break;
                 case VirtualKey.Escape when _fullscreen: ToggleFullscreen(); break;
                 case VirtualKey.Escape when _vodPanelOpen: CloseVodPanel(); break;
+                case VirtualKey.Escape when S.Theatre: ToggleTheatre(); break;
                 default: return;
             }
             e.Handled = true;
@@ -308,17 +311,21 @@ public sealed partial class MainWindow : Window
         Splitter.PointerCaptureLost += (_, _) => dragging = false;
     }
 
+    // Layouts: normal, theatre (no sidebar or info bar), fullscreen (video only, or video + chat),
+    // and chat-only. Everything that depends on them is decided here.
     void ApplyLayoutSettings()
     {
         bool fs = _fullscreen;
+        bool theatre = S.Theatre && !fs;
+        bool chrome = !fs && !theatre;
         TitleRow.Height = new GridLength(fs ? 0 : 44);
         TitleBar.Visibility = fs ? Visibility.Collapsed : Visibility.Visible;
-        InfoBar.Visibility = fs ? Visibility.Collapsed : Visibility.Visible;
-        VideoArea.CornerRadius = new CornerRadius(fs ? 0 : 8, 0, 0, 0);
+        InfoBar.Visibility = chrome ? Visibility.Visible : Visibility.Collapsed;
+        VideoArea.CornerRadius = new CornerRadius(chrome ? 8 : 0, 0, 0, 0);
 
         bool collapsed = S.SidebarCollapsed;
-        SidebarCol.Width = new GridLength(fs ? 0 : collapsed ? 56 : 244);
-        Sidebar.Visibility = fs ? Visibility.Collapsed : Visibility.Visible;
+        SidebarCol.Width = new GridLength(!chrome ? 0 : collapsed ? 56 : 244);
+        Sidebar.Visibility = chrome ? Visibility.Visible : Visibility.Collapsed;
         Sidebar.Padding = collapsed ? new Thickness(4, 2, 4, 8) : new Thickness(8, 2, 6, 8);
         AddBox.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         AddCompactButton.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
@@ -329,22 +336,26 @@ public sealed partial class MainWindow : Window
         ChannelList.Margin = collapsed ? new Thickness(-2, 0, -2, 0) : new Thickness(-4, 0, -4, 0);
 
         bool chatOnly = S.ChatOnly && !fs;
+        bool chat = ChatShown;
         MainCol.Width = chatOnly ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        ChatCol.Width = fs ? new GridLength(0) : chatOnly ? new GridLength(1, GridUnitType.Star) : new GridLength(S.ChatWidth);
-        SplitterCol.Width = new GridLength(fs || chatOnly ? 0 : 5);
+        ChatCol.Width = !chat ? new GridLength(0) : chatOnly ? new GridLength(1, GridUnitType.Star) : new GridLength(S.ChatWidth);
+        SplitterCol.Width = new GridLength(chat && !chatOnly ? 5 : 0);
         ShowVideoButton.Visibility = chatOnly ? Visibility.Visible : Visibility.Collapsed;
+        ExitTheatreButton.Visibility = theatre ? Visibility.Visible : Visibility.Collapsed;
+        HideChatButton.Visibility = fs ? Visibility.Visible : Visibility.Collapsed;
         UpdateEmptyState();
         UpdateModeUi();
-        if (fs) ChatPanel.Visibility = Visibility.Collapsed;
     }
+
+    bool ChatShown => _tabs.Count > 0 && (!_fullscreen || S.FullscreenChat);
 
     void UpdateEmptyState()
     {
         bool empty = _tabs.Count == 0;
         EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
         MainArea.Visibility = empty || S.ChatOnly ? Visibility.Collapsed : Visibility.Visible;
-        ChatPanel.Visibility = empty || _fullscreen ? Visibility.Collapsed : Visibility.Visible;
-        Splitter.Visibility = empty || S.ChatOnly ? Visibility.Collapsed : Visibility.Visible;
+        ChatPanel.Visibility = ChatShown ? Visibility.Visible : Visibility.Collapsed;
+        Splitter.Visibility = ChatShown && !(S.ChatOnly && !_fullscreen) ? Visibility.Visible : Visibility.Collapsed;
         UpdateVideoBounds();
     }
 

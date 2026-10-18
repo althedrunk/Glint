@@ -267,6 +267,8 @@
                         <ComboBox x:Name="QualityBox" MinWidth="118" VerticalAlignment="Center" PlaceholderText="Quality" ToolTipService.ToolTip="Quality" />
                         <Button x:Name="ChatOnlyButton" AutomationProperties.Name="Chat only" Style="{StaticResource IconButton}" Content="&#xE8BD;"
                                 ToolTipService.ToolTip="Hide video" Margin="4,0,0,0" />
+                        <Button x:Name="TheatreButton" AutomationProperties.Name="Theatre mode" Style="{StaticResource IconButton}" Content="&#xE7F4;"
+                                ToolTipService.ToolTip="Theatre mode (T)" />
                         <Button x:Name="FullscreenButton" AutomationProperties.Name="Fullscreen" Style="{StaticResource IconButton}" Content="&#xE740;"
                                 ToolTipService.ToolTip="Fullscreen (F)" />
                     </StackPanel>
@@ -288,8 +290,14 @@
                         <Ellipse x:Name="ConnectionDot" Width="7" Height="7" Fill="#FF6B6B76" />
                         <TextBlock x:Name="ChatHeader" Text="Chat" FontWeight="SemiBold" FontSize="13" />
                     </StackPanel>
-                    <Button x:Name="ShowVideoButton" AutomationProperties.Name="Show video" Style="{StaticResource IconButton}" Content="&#xE714;" HorizontalAlignment="Right"
-                            ToolTipService.ToolTip="Show video" Visibility="Collapsed" Height="28" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2">
+                        <Button x:Name="ExitTheatreButton" AutomationProperties.Name="Exit theatre mode" Style="{StaticResource IconButton}" Content="&#xE73F;"
+                                ToolTipService.ToolTip="Exit theatre mode (T)" Visibility="Collapsed" Height="28" />
+                        <Button x:Name="HideChatButton" AutomationProperties.Name="Hide chat" Style="{StaticResource IconButton}" Content="&#xE89F;"
+                                ToolTipService.ToolTip="Hide chat (C)" Visibility="Collapsed" Height="28" />
+                        <Button x:Name="ShowVideoButton" AutomationProperties.Name="Show video" Style="{StaticResource IconButton}" Content="&#xE714;"
+                                ToolTipService.ToolTip="Show video" Visibility="Collapsed" Height="28" />
+                    </StackPanel>
                 </Grid>
                 <chat:ChatView x:Name="Chat" Grid.Row="1" />
                 <Grid Grid.Row="2" Padding="10,6,10,10">

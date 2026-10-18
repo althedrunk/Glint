@@ -31,6 +31,9 @@ public sealed partial class MainWindow
         ReloadButton.Click += (_, _) => Reload();
         RetryButton.Click += (_, _) => Reload();
         FullscreenButton.Click += (_, _) => ToggleFullscreen();
+        TheatreButton.Click += (_, _) => ToggleTheatre();
+        ExitTheatreButton.Click += (_, _) => ToggleTheatre();
+        HideChatButton.Click += (_, _) => ToggleFullscreenChat();
         ChatOnlyButton.Click += (_, _) => SetChatOnly(true);
         ShowVideoButton.Click += (_, _) => SetChatOnly(false);
         QualityBox.SelectionChanged += (_, _) =>
@@ -242,6 +245,30 @@ public sealed partial class MainWindow
         if (_active == null && !_fullscreen) return;
         _fullscreen = !_fullscreen;
         AppWindow.SetPresenter(_fullscreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped);
+        ApplyLayoutSettings();
+    }
+
+    // T: from fullscreen it drops back into theatre rather than all the way out.
+    void ToggleTheatre()
+    {
+        if (_fullscreen)
+        {
+            S.Theatre = true;
+            ToggleFullscreen();
+        }
+        else
+        {
+            S.Theatre = !S.Theatre;
+            ApplyLayoutSettings();
+        }
+        Settings.Save();
+    }
+
+    void ToggleFullscreenChat()
+    {
+        if (!_fullscreen) return;
+        S.FullscreenChat = !S.FullscreenChat;
+        Settings.Save();
         ApplyLayoutSettings();
     }
 
