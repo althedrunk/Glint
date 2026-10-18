@@ -155,7 +155,7 @@ public sealed partial class MainWindow
         {
             _player?.Stop();
             _playerState = Player.PlayerState.Idle;
-            ShowVideoMessage("Couldn't load this video. Subscriber-only VODs need you to be subbed.", null, retry: true);
+            ShowVideoMessage("Couldn't load this video. Glint can't play subscriber-only VODs yet.", null, retry: true);
             UpdateVideoBounds();
             return;
         }
