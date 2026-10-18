@@ -20,7 +20,7 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <Version>0.1.0</Version>
+    <Version>0.1.0-beta.1</Version>
     <Product>Glint</Product>
     <Description>Glint - a fast Twitch client with 7TV</Description>
   </PropertyGroup>
@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\lib\mpv\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\lib\mpv\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\..\lib\mpv\libmpv-2.dll') And '$(IncludeMpv)' != 'false'" />
   </ItemGroup>
 </Project>

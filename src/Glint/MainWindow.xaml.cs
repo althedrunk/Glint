@@ -172,6 +172,7 @@ public sealed partial class MainWindow : Window
     void Shutdown()
     {
         _closing = true;
+        _videoSetupCancellation.Cancel();
         _overlayTimer.Stop();
         _refreshTimer.Stop();
         _viewerTimer.Stop();

@@ -177,6 +177,7 @@ public sealed partial class MainWindow
     async Task PlayVodAsync(ChannelTab tab, VideoInfo video, double start)
     {
         if (_closing || !_tabs.Contains(tab) || S.ChatOnly) return;
+        if (!await EnsureVideoRuntimeAsync(tab)) return;
         var playback = tab.Playback;
         int version = ++playback.Version;
         playback.Started = true;

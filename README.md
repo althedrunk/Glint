@@ -4,6 +4,12 @@
 
 Glint is a native Twitch client for Windows, bringing streams and chat into a customisable desktop app.
 
+## Download
+
+Download the [Windows x64 beta](https://github.com/althedrunk/Glint/releases/tag/v0.1.0-beta.1), extract the entire ZIP and open `Glint.exe`. No development tools or administrator access are needed. The first time you play a stream, Glint offers to download its video component directly from mpv's official release. This is a one-time setup.
+
+Requires 64-bit Windows 10 version 2004 or later, or Windows 11. Tested on Windows 11. Twitch sign-in also requires the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The beta is unsigned, so Windows may display an unknown-publisher warning.
+
 ## Overview
 
 - Watch live streams and past broadcasts with hardware-accelerated playback, theatre and fullscreen modes.
@@ -40,6 +46,8 @@ For a development build:
 ```powershell
 dotnet build src\Glint -c Debug
 ```
+
+To build the downloadable ZIP, run `powershell -ExecutionPolicy Bypass -File tools\package-release.ps1`. The archive and its checksum are written to `dist\releases`.
 
 The video library is downloaded separately by `fetch-mpv.ps1` from [shinchiro's mpv builds](https://github.com/shinchiro/mpv-winbuild-cmake).
 
@@ -90,4 +98,4 @@ Glint is independent of Twitch and is not affiliated with or endorsed by it.
 
 ## Licence
 
-Glint is [MIT licensed](LICENSE). libmpv is downloaded separately and covered by [mpv's licence](https://github.com/mpv-player/mpv/blob/master/Copyright).
+Glint is [MIT licensed](LICENSE). Other components retain their own licences; see [third-party notices](THIRD-PARTY-NOTICES.md). The Windows download gets libmpv separately from its publisher during video setup.

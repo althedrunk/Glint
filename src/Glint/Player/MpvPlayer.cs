@@ -7,6 +7,9 @@ static partial class Mpv
 {
     const string Lib = "libmpv-2.dll";
 
+    static Mpv() => NativeLibrary.SetDllImportResolver(typeof(Mpv).Assembly,
+        (name, assembly, path) => name == Lib ? NativeLibrary.Load(MpvRuntime.LibraryPath) : IntPtr.Zero);
+
     [LibraryImport(Lib)] public static partial IntPtr mpv_create();
     [LibraryImport(Lib)] public static partial int mpv_initialize(IntPtr ctx);
     [LibraryImport(Lib)] public static partial void mpv_terminate_destroy(IntPtr ctx);

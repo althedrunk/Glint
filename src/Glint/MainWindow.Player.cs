@@ -184,6 +184,7 @@ public sealed partial class MainWindow
 
     void Reload()
     {
+        _videoSetupSkipped = false;
         if (_active is not { } tab) return;
         if (tab.Vod != null) _ = PlayVodAsync(tab, tab.Vod, _player?.TimePos ?? tab.VodPosition);
         else _ = PlayAsync(tab);
@@ -203,6 +204,7 @@ public sealed partial class MainWindow
     async Task PlayAsync(ChannelTab tab)
     {
         if (_closing || !_tabs.Contains(tab) || S.ChatOnly) return;
+        if (!await EnsureVideoRuntimeAsync(tab)) return;
         var playback = tab.Playback;
         int version = ++playback.Version;
         playback.Started = true;
