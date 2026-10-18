@@ -91,7 +91,7 @@ public sealed class MpvPlayer : IDisposable
         Opt("input-default-bindings", "no");
         Opt("input-vo-keyboard", "no");
         Opt("input-cursor", "yes");
-        Opt("cursor-autohide", "no");
+        Opt("cursor-autohide", "1500");
         Opt("force-window", "yes");
         Opt("idle", "yes");
         Opt("ytdl", "no");
@@ -120,6 +120,7 @@ public sealed class MpvPlayer : IDisposable
         // Mouse input on the video surface comes back to us as script messages.
         Command("keybind", "MBTN_LEFT_DBL", "script-message glint dblclick");
         Command("keybind", "MBTN_LEFT", "script-message glint click");
+        Command("keybind", "MOUSE_MOVE", "script-message glint move");
         Command("keybind", "WHEEL_UP", "script-message glint wheel 1");
         Command("keybind", "WHEEL_DOWN", "script-message glint wheel -1");
 

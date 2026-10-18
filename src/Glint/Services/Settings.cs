@@ -20,6 +20,7 @@ public sealed class AppSettings
     public double ChatWidth { get; set; } = 360;
     public bool SidebarCollapsed { get; set; }
     public bool ChatOnly { get; set; }
+    public bool ChatHidden { get; set; }
     public bool Theatre { get; set; }
     public bool FullscreenChat { get; set; }
     public bool ShowTimestamps { get; set; }

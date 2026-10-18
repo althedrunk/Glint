@@ -14,6 +14,7 @@ decoding, and chat is drawn with Direct2D (via Win2D).
 - Tabs for several channels at once. Chat keeps running in the background tabs.
 - Log in with Twitch to chat and to see your followed channels in the sidebar
 - Theatre mode (just tabs, video and chat), fullscreen with or without chat, and a chat-only mode
+- Player controls float over the video in windowed, theatre and fullscreen modes, including chat, theatre and fullscreen toggles
 - Tab completion for emotes and @names
 
 ## Requirements
@@ -42,9 +43,10 @@ desktop shortcuts. Run it again to update.
 |---|---|
 | F, F11 or double-click the video | Fullscreen |
 | T | Theatre mode (from fullscreen, drops back to theatre) |
-| C | Show / hide chat in fullscreen |
+| C | Show / hide chat in any mode |
 | Esc | Leave fullscreen or theatre mode |
 | M | Mute |
+| ↑ / ↓ or mouse wheel over the player | Volume up / down |
 | Space | Pause |
 | ← / → | Skip back / forward 10 seconds (VODs only) |
 | Ctrl+W | Close tab |

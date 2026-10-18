@@ -1,6 +1,7 @@
 using System.Globalization;
 using Glint.Chat;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -49,6 +50,7 @@ public sealed partial class MainWindow
 {
     static readonly double[] Speeds = { 0.5, 0.75, 1, 1.25, 1.5, 2 };
     bool _vodPanelOpen, _seekDragging, _updatingSeek;
+    double _speed = 1;
 
     void WireVodControls()
     {
@@ -62,24 +64,35 @@ public sealed partial class MainWindow
             _ = PlayVodAsync(_active, item.Video, 0);
         };
         GoLiveButton.Click += (_, _) => { if (_active != null) ExitVod(_active); };
-        PlayPauseButton.Click += (_, _) => TogglePause();
+        _overlay.GoLiveButton.Click += (_, _) => { if (_active != null) ExitVod(_active); };
+        _overlay.PlayPauseButton.Click += (_, _) => TogglePause();
 
-        SpeedBox.ItemsSource = Speeds.Select(s => s.ToString("0.##", CultureInfo.InvariantCulture) + "x").ToList();
-        SpeedBox.SelectedIndex = 2;
-        SpeedBox.SelectionChanged += (_, _) =>
+        var speeds = new MenuFlyout();
+        TrackFlyout(speeds);
+        foreach (var speed in Speeds)
         {
-            if (SpeedBox.SelectedIndex >= 0) _player?.SetSpeed(Speeds[SpeedBox.SelectedIndex]);
-        };
+            string label = speed.ToString("0.##", CultureInfo.InvariantCulture) + "x";
+            var item = new RadioMenuFlyoutItem { Text = label, GroupName = "Speed", IsChecked = speed == _speed };
+            item.Click += (_, _) =>
+            {
+                _speed = speed;
+                _overlay.SpeedButton.Content = label;
+                _player?.SetSpeed(speed);
+            };
+            speeds.Items.Add(item);
+        }
+        _overlay.SpeedButton.Flyout = speeds;
 
         // The slider swallows pointer events, hence handledEventsToo. Seek on release, not on every pixel of a drag.
-        VodSeek.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => _seekDragging = true), true);
-        VodSeek.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, _) => EndSeekDrag()), true);
-        VodSeek.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler((_, _) => EndSeekDrag()), true);
-        VodSeek.ValueChanged += (_, e) =>
+        _overlay.Seek.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => _seekDragging = true), true);
+        _overlay.Seek.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, _) => EndSeekDrag()), true);
+        _overlay.Seek.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler((_, _) => EndSeekDrag()), true);
+        _overlay.Seek.ValueChanged += (_, e) =>
         {
             if (_updatingSeek) return;
-            VodTime.Text = VodItem.FormatTime(e.NewValue);
+            UpdateVodTime(e.NewValue);
             if (!_seekDragging) _player?.Seek(e.NewValue); // keyboard nudges on the slider
+            ShowPlayerOverlay();
         };
     }
 
@@ -87,12 +100,14 @@ public sealed partial class MainWindow
     {
         if (!_seekDragging) return;
         _seekDragging = false;
-        _player?.Seek(VodSeek.Value);
+        _player?.Seek(_overlay.Seek.Value);
+        ShowPlayerOverlay();
     }
 
     void SeekBy(double seconds)
     {
         if (_player?.TimePos is { } pos) _player.Seek(pos + seconds);
+        ShowPlayerOverlay();
     }
 
     async Task OpenVodPanelAsync()
@@ -159,7 +174,7 @@ public sealed partial class MainWindow
             UpdateVideoBounds();
             return;
         }
-        LoadVod((StreamVariant)QualityBox.SelectedItem!, start > 3 ? start : null);
+        LoadVod(_selectedVariant!, start > 3 ? start : null);
         _vodTimer.Start();
     }
 
@@ -169,7 +184,7 @@ public sealed partial class MainWindow
         if (player == null) return;
         _playerState = Player.PlayerState.Loading;
         player.Load(variant.Url, start);
-        if (SpeedBox.SelectedIndex >= 0) player.SetSpeed(Speeds[SpeedBox.SelectedIndex]);
+        player.SetSpeed(_speed);
         UpdateVideoBounds();
     }
 
@@ -197,24 +212,28 @@ public sealed partial class MainWindow
         if (!_seekDragging)
         {
             _updatingSeek = true;
-            VodSeek.Maximum = Math.Max(1, duration);
-            VodSeek.Value = Math.Min(pos, VodSeek.Maximum);
+            _overlay.Seek.Maximum = Math.Max(1, duration);
+            _overlay.Seek.Value = Math.Min(pos, _overlay.Seek.Maximum);
             _updatingSeek = false;
-            VodTime.Text = VodItem.FormatTime(pos);
+            UpdateVodTime(pos);
         }
-        VodDuration.Text = VodItem.FormatTime(duration);
-        PlayPauseButton.Content = _player.Paused ? "" : "";
+        UpdateOverlayState();
         _active.ReplayEngine?.Tick(pos);
     }
+
+    void UpdateVodTime(double position) =>
+        _overlay.StatusText.Text = $"{VodItem.FormatTime(position)} / {VodItem.FormatTime(_player?.Duration ?? _active?.Vod?.LengthSeconds ?? 0)}";
 
     // Shows/hides the bits that differ between live and VOD.
     void UpdateModeUi()
     {
         var tab = _active;
         bool vod = tab?.Vod != null;
-        Transport.Visibility = vod && !_fullscreen ? Visibility.Visible : Visibility.Collapsed;
         GoLiveButton.Visibility = vod ? Visibility.Visible : Visibility.Collapsed;
         GoLiveButton.Content = tab?.Entry.IsLive == true ? "Back to live" : "Close video";
         VodBadge.Visibility = vod ? Visibility.Visible : Visibility.Collapsed;
+        UpdateOverlayState();
+        if (vod) UpdateVodTime(tab!.VodPosition);
+        UpdateVideoBounds();
     }
 }

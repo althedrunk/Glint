@@ -36,7 +36,7 @@ public sealed partial class MainWindow : Window
     readonly DispatcherQueueTimer _refreshTimer, _clockTimer, _vodTimer;
 
     ChannelTab? _active;
-    bool _dialogOpen, _fullscreen;
+    bool _dialogOpen, _fullscreen, _closing;
 
     static AppSettings S => Settings.Current;
 
@@ -45,6 +45,8 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         _hwnd = WindowNative.GetWindowHandle(this);
         _dispatcher = DispatcherQueue;
+        _overlay = new PlayerOverlay(_hwnd);
+        _overlayTimer = Timer(TimeSpan.FromSeconds(2.5), HideIdleOverlay);
 
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -146,10 +148,17 @@ public sealed partial class MainWindow : Window
 
     void Shutdown()
     {
+        _closing = true;
+        _overlayTimer.Stop();
+        _refreshTimer.Stop();
+        _clockTimer.Stop();
+        _vodTimer.Stop();
+        _overlay.Close();
         SavePlacement();
         SaveTabs();
         Settings.SaveNow();
         try { _player?.Dispose(); } catch { }
+        _host?.Dispose();
         _ads?.Dispose();
         _irc.Dispose();
         _stv.Dispose();
@@ -220,6 +229,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Changed += (_, e) =>
         {
             if (e.DidPresenterChange || e.DidSizeChange) UpdateCaptionInset();
+            if (e.DidPositionChange || e.DidSizeChange || e.DidPresenterChange) UpdateVideoBounds();
         };
 
         ChatInput.KeyDown += ChatInput_KeyDown;
@@ -260,8 +270,10 @@ public sealed partial class MainWindow : Window
             {
                 case VirtualKey.F: ToggleFullscreen(); break;
                 case VirtualKey.T: ToggleTheatre(); break;
-                case VirtualKey.C when _fullscreen: ToggleFullscreenChat(); break;
+                case VirtualKey.C: ToggleChat(); break;
                 case VirtualKey.M: ToggleMute(); break;
+                case VirtualKey.Up: ChangeVolume(5); break;
+                case VirtualKey.Down: ChangeVolume(-5); break;
                 case VirtualKey.Space: TogglePause(); break;
                 case VirtualKey.Left when _active?.Vod != null: SeekBy(-10); break;
                 case VirtualKey.Right when _active?.Vod != null: SeekBy(10); break;
@@ -338,18 +350,16 @@ public sealed partial class MainWindow : Window
         bool chatOnly = S.ChatOnly && !fs;
         // Column widths don't depend on whether tabs are open yet (visibility handles that), otherwise
         // opening the first tab at startup leaves the chat column at zero width.
-        bool chat = !fs || S.FullscreenChat;
+        bool chat = chatOnly || (fs ? S.FullscreenChat : !S.ChatHidden);
         MainCol.Width = chatOnly ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         ChatCol.Width = !chat ? new GridLength(0) : chatOnly ? new GridLength(1, GridUnitType.Star) : new GridLength(S.ChatWidth);
         SplitterCol.Width = new GridLength(chat && !chatOnly ? 5 : 0);
         ShowVideoButton.Visibility = chatOnly ? Visibility.Visible : Visibility.Collapsed;
-        ExitTheatreButton.Visibility = theatre ? Visibility.Visible : Visibility.Collapsed;
-        HideChatButton.Visibility = fs ? Visibility.Visible : Visibility.Collapsed;
         UpdateEmptyState();
         UpdateModeUi();
     }
 
-    bool ChatShown => _tabs.Count > 0 && (!_fullscreen || S.FullscreenChat);
+    bool ChatShown => _tabs.Count > 0 && (S.ChatOnly && !_fullscreen || (_fullscreen ? S.FullscreenChat : !S.ChatHidden));
 
     void UpdateEmptyState()
     {

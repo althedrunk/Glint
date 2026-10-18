@@ -171,7 +171,6 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <!-- mpv's native window sits on top of this, so anything drawn here only shows while it's hidden -->
@@ -209,24 +208,7 @@
                     </Grid>
                 </Grid>
 
-                <Grid x:Name="Transport" Grid.Row="1" Padding="8,6,14,0" ColumnSpacing="10" Visibility="Collapsed">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Button x:Name="PlayPauseButton" AutomationProperties.Name="Play or pause" Style="{StaticResource IconButton}" Content="&#xE769;"
-                            ToolTipService.ToolTip="Play / pause (Space)" />
-                    <TextBlock x:Name="VodTime" Grid.Column="1" VerticalAlignment="Center" FontSize="12" MinWidth="52" Text="0:00" />
-                    <Slider x:Name="VodSeek" Grid.Column="2" Minimum="0" Maximum="1" VerticalAlignment="Center" IsThumbToolTipEnabled="False" />
-                    <TextBlock x:Name="VodDuration" Grid.Column="3" VerticalAlignment="Center" FontSize="12" Text="0:00"
-                               Foreground="{StaticResource GlintSubtleTextBrush}" />
-                    <ComboBox x:Name="SpeedBox" Grid.Column="4" VerticalAlignment="Center" MinWidth="76" ToolTipService.ToolTip="Speed" />
-                </Grid>
-
-                <Grid x:Name="InfoBar" Grid.Row="2" Padding="14,10,10,10" ColumnSpacing="12">
+                <Grid x:Name="InfoBar" Grid.Row="1" Padding="14,10,10,10" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -259,18 +241,8 @@
                         <Button x:Name="GoLiveButton" AutomationProperties.Name="Back to live" Content="Back to live" Visibility="Collapsed" Margin="0,0,6,0" />
                         <Button x:Name="VideosButton" AutomationProperties.Name="Past broadcasts" Style="{StaticResource IconButton}" Content="&#xE81C;"
                                 ToolTipService.ToolTip="Past broadcasts" />
-                        <Button x:Name="ReloadButton" AutomationProperties.Name="Reload stream" Style="{StaticResource IconButton}" Content="&#xE72C;"
-                                ToolTipService.ToolTip="Reload (F5)" />
-                        <Button x:Name="MuteButton" AutomationProperties.Name="Mute" Style="{StaticResource IconButton}" Content="&#xE767;" ToolTipService.ToolTip="Mute (M)" />
-                        <Slider x:Name="VolumeSlider" Width="96" Minimum="0" Maximum="100" StepFrequency="1" VerticalAlignment="Center"
-                                IsThumbToolTipEnabled="True" Margin="2,0,8,0" />
-                        <ComboBox x:Name="QualityBox" MinWidth="118" VerticalAlignment="Center" PlaceholderText="Quality" ToolTipService.ToolTip="Quality" />
-                        <Button x:Name="ChatOnlyButton" AutomationProperties.Name="Chat only" Style="{StaticResource IconButton}" Content="&#xE8BD;"
-                                ToolTipService.ToolTip="Hide video" Margin="4,0,0,0" />
-                        <Button x:Name="TheatreButton" AutomationProperties.Name="Theatre mode" Style="{StaticResource IconButton}" Content="&#xE7F4;"
-                                ToolTipService.ToolTip="Theatre mode (T)" />
-                        <Button x:Name="FullscreenButton" AutomationProperties.Name="Fullscreen" Style="{StaticResource IconButton}" Content="&#xE740;"
-                                ToolTipService.ToolTip="Fullscreen (F)" />
+                        <Button x:Name="ChatOnlyButton" AutomationProperties.Name="Chat only" Style="{StaticResource IconButton}" Content="&#xE8A0;"
+                                ToolTipService.ToolTip="Hide video (chat only)" />
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -290,14 +262,8 @@
                         <Ellipse x:Name="ConnectionDot" Width="7" Height="7" Fill="#FF6B6B76" />
                         <TextBlock x:Name="ChatHeader" Text="Chat" FontWeight="SemiBold" FontSize="13" />
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2">
-                        <Button x:Name="ExitTheatreButton" AutomationProperties.Name="Exit theatre mode" Style="{StaticResource IconButton}" Content="&#xE73F;"
-                                ToolTipService.ToolTip="Exit theatre mode (T)" Visibility="Collapsed" Height="28" />
-                        <Button x:Name="HideChatButton" AutomationProperties.Name="Hide chat" Style="{StaticResource IconButton}" Content="&#xE89F;"
-                                ToolTipService.ToolTip="Hide chat (C)" Visibility="Collapsed" Height="28" />
-                        <Button x:Name="ShowVideoButton" AutomationProperties.Name="Show video" Style="{StaticResource IconButton}" Content="&#xE714;"
+                    <Button x:Name="ShowVideoButton" HorizontalAlignment="Right" AutomationProperties.Name="Show video" Style="{StaticResource IconButton}" Content="&#xE714;"
                                 ToolTipService.ToolTip="Show video" Visibility="Collapsed" Height="28" />
-                    </StackPanel>
                 </Grid>
                 <chat:ChatView x:Name="Chat" Grid.Row="1" />
                 <Grid Grid.Row="2" Padding="10,6,10,10">

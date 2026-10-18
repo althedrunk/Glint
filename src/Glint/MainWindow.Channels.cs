@@ -243,10 +243,12 @@ public sealed partial class MainWindow
         InfoTitle.Text = tab.Vod?.Title ?? e.Stream?.Title ?? "Offline";
         ChatHeader.Text = tab.Vod != null ? "Chat replay" : "Chat";
         UpdateInfoMeta();
+        UpdateOverlayState();
     }
 
     void UpdateInfoMeta()
     {
+        if (_closing) return;
         if (_active is not { } tab) return;
         if (tab.Vod is { } v)
         {
@@ -256,9 +258,12 @@ public sealed partial class MainWindow
         if (tab.Entry.Stream is not { } s)
         {
             InfoMeta.Text = "";
+            _overlay.StatusText.Text = "";
             return;
         }
         var up = DateTimeOffset.UtcNow - s.StartedAt;
+        _overlay.StatusText.Text = Join($"{s.Viewers:N0} viewers",
+            up > TimeSpan.Zero && up < TimeSpan.FromDays(7) ? $"{(int)up.TotalHours}:{up.Minutes:00}:{up.Seconds:00}" : null);
         InfoMeta.Text = Join(
             s.Game,
             $"{s.Viewers:N0} viewers",

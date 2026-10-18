@@ -14,8 +14,10 @@ public sealed partial class VideoHost : IDisposable
     delegate IntPtr WndProcDelegate(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
     static WndProcDelegate? _wndProc;
     static bool _registered;
+    static readonly Dictionary<IntPtr, VideoHost> Hosts = new();
 
     public IntPtr Hwnd { get; }
+    public event Action<string>? Input;
     bool _visible;
     (int X, int Y, int W, int H) _bounds;
 
@@ -41,6 +43,7 @@ public sealed partial class VideoHost : IDisposable
         Hwnd = CreateWindowExW(0, ClassName, "", WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
             0, 0, 1, 1, parent, IntPtr.Zero, hInstance, IntPtr.Zero);
         if (Hwnd == IntPtr.Zero) throw new InvalidOperationException("CreateWindowEx failed");
+        Hosts[Hwnd] = this;
     }
 
     public void SetBounds(int x, int y, int w, int h, bool visible)
@@ -59,9 +62,28 @@ public sealed partial class VideoHost : IDisposable
         if (_visible) SetWindowPos(Hwnd, HWND_TOP, _bounds.X, _bounds.Y, _bounds.W, _bounds.H, SWP_NOACTIVATE);
     }
 
-    static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam) => DefWindowProcW(hwnd, msg, wParam, lParam);
+    static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        // With wid, mpv doesn't always receive input sent to the host HWND.
+        if (Hosts.TryGetValue(hwnd, out var host))
+        {
+            switch (msg)
+            {
+                case 0x0200: host.Input?.Invoke("move"); break;
+                case 0x0203: host.Input?.Invoke("dblclick"); return IntPtr.Zero;
+                case 0x020A:
+                    host.Input?.Invoke((short)(wParam.ToInt64() >> 16) > 0 ? "wheel 1" : "wheel -1");
+                    return IntPtr.Zero;
+            }
+        }
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
 
-    public void Dispose() => DestroyWindow(Hwnd);
+    public void Dispose()
+    {
+        Hosts.Remove(Hwnd);
+        DestroyWindow(Hwnd);
+    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     struct WNDCLASSEXW
