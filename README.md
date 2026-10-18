@@ -2,33 +2,17 @@
   <img src="docs/branding/glint-logo.png" alt="Glint" width="280">
 </p>
 
-A native Twitch client for Windows, with hardware-accelerated video and chat with Twitch, 7TV, BTTV and FFZ emotes.
+Glint is a native Twitch client for Windows, bringing streams and chat into a customisable desktop app.
 
-## Features
+## Overview
 
-- Live streams with quality selection, including higher resolutions when the channel provides them.
-- Channel tabs that keep playing in the background. Each tab has its own mute and volume controls; switching tabs leaves audio unchanged.
-- Sidebar stream selections replace the current tab. Use + for an empty tab, or Ctrl+click or middle-click a stream to open it in a new tab. Streams already open are selected in their existing tab.
-- Multiview for two to four streams, with a grid or one main video. Enlarge a tile without reloading the stream.
-- Chats that follow the selected video, stay pinned, or show each stream. Put them beside or below the videos and adjust the space they use.
-- A separate message recipient in multiview, with a draft for each channel.
-- Past broadcasts with seeking, configurable skip buttons, playback speed controls and chat replay.
-- A Browse page with the top live channels, categories and search, so you can find streams beyond the ones you follow.
-- Clips of live streams from the player, with a link to Twitch's clip editor.
-- 7TV, BTTV and FFZ emotes, including animated and zero-width ones, plus 7TV personal emotes, name paints and badges.
-- An emote picker with search, recently used emotes and, when logged in, your own Twitch emotes. Tab completes emotes and @names.
-- Highlights for your name, chosen words and chosen users, collected in a mentions list. The taskbar can flash and a sound can play when you're mentioned.
-- Replies and reply threads. First-time chatters, highlighted messages and announcements are marked.
-- Recent chat history when you open a channel.
-- Chat fonts, line and message spacing, emote sizing and animation, alternating message backgrounds, and optional pause-on-hover scrolling. Changes apply live.
-- Filters for words, phrases, usernames, announcements and subscription notices.
-- Searchable settings with accent colours, backgrounds, sidebar sizing, player defaults, configurable notification sounds and remappable shortcuts.
-- Named preference profiles and saved multiview layouts.
-- Confirmed resets for individual settings categories or all customisation settings, keeping your account, open streams and saved setups.
-- Clickable usernames with a history of their loaded messages in that channel. User history, mentions and reply-thread windows can be moved, resized and searched.
-- Theatre, fullscreen and chat-only modes.
-- Optional Twitch login for sending messages and viewing followed channels. Watching and reading chat work without signing in.
-- An optional twitch.tv session (Settings), signed in on Twitch's own page, for 1440p/source quality, your subscriber and Turbo benefits, subscriber-only VODs, and watch streaks and channel points for the streams you watch.
+- Watch live streams and past broadcasts with hardware-accelerated playback, theatre and fullscreen modes.
+- Keep channels open in tabs or watch up to four streams in multiview, with flexible chat layouts and independent audio controls.
+- Browse channels and categories, and create clips from the player.
+- Chat with Twitch, 7TV, BTTV and FFZ emotes, replies, mentions and searchable message history.
+- Customise the appearance, chat, notifications and shortcuts, with saved profiles and layouts.
+
+Watching and reading chat work without an account. Sign in with Twitch for sending messages, followed channels, your emotes and supported subscriber and Turbo benefits.
 
 ## Install from source
 
@@ -51,7 +35,8 @@ dotnet build src\Glint -c Debug
 
 The video library is downloaded separately by `fetch-mpv.ps1` from [shinchiro's mpv builds](https://github.com/shinchiro/mpv-winbuild-cmake).
 
-## Keyboard shortcuts
+<details>
+<summary>Keyboard shortcuts</summary>
 
 These are the default bindings. Most can be changed in Settings under Shortcuts. Seek distances can be changed under Player.
 
@@ -78,9 +63,12 @@ These are the default bindings. Most can be changed in Settings under Shortcuts.
 | F5 | Reload the selected stream |
 | Ctrl+F1 | Open Settings |
 | Tab in the message box | Complete an emote or @name |
+| : + two or more characters | Find emotes; arrows select, Tab or Enter inserts, Esc closes |
 | Esc in the message box | Cancel a reply |
 
 Single-letter shortcuts are inactive while typing or using an input control.
+
+</details>
 
 ## Notes
 

@@ -132,7 +132,7 @@ public sealed partial class MainWindow : Window
 
     async Task ApplyAccountAsync()
     {
-        _userEmotes = null;
+        ResetUserEmotes();
         await TwitchSession.CheckAsync();
         var apiToken = await TwitchAuth.EnsureTokenAsync();
         if (TwitchSession.IsConnected) StartIrc(TwitchSession.Login, S.WebSessionToken);
@@ -179,6 +179,8 @@ public sealed partial class MainWindow : Window
         _vodTimer.Stop();
         _settingsWindow?.Close();
         NotificationSound.Stop();
+        HideEmoteSuggestions();
+        _emoteSuggestions?.Dispose();
         _overlay.Close();
         foreach (var window in _chatHistoryWindows.ToList()) window.Close();
         DisposeMultiviewChats();
@@ -314,6 +316,7 @@ public sealed partial class MainWindow : Window
 
         WireReplies();
         WireEmotePicker();
+        WireEmoteSuggestions();
         WireBrowse();
         WireClips();
         WireSession();
@@ -468,6 +471,7 @@ public sealed partial class MainWindow : Window
 
     internal void OnChatPreferencesChanged()
     {
+        QueueEmoteSuggestions();
         Chat.RefreshMessages(false);
         foreach (var pane in _multiviewChats.Values) pane.View.RefreshMessages(false);
         foreach (var window in _chatHistoryWindows) window.View.RefreshMessages(false);

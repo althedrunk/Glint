@@ -43,10 +43,10 @@ settings.ShortcutOverrides["fullscreen"] = "Ctrl+F";
 Check(ShortcutMap.Bindings(ShortcutMap.Definitions.First(d => d.Id == "fullscreen"), settings).SequenceEqual(["Ctrl+F"]), "Custom bindings replace all defaults for that action");
 settings.Profiles.Add(reloaded); settings.MultiviewPresets.Add(preset);
 settings.Favorites = ["favourite"]; settings.ActiveTab = "two";
-settings.BlockAds = true; settings.SoundOnHighlight = true;
+settings.BlockAds = true; settings.SoundOnHighlight = true; settings.EmoteSuggestions = false;
 PreferenceCatalog.ResetAll(settings);
 var reset = PreferenceCatalog.Capture("Reset", settings);
-Check(PreferenceCatalog.Capture("Defaults", new()).Values.All(pair => JsonElement.DeepEquals(pair.Value, reset.Values[pair.Key])), "Restore all defaults resets every customisation category");
+Check(settings.EmoteSuggestions && PreferenceCatalog.Capture("Defaults", new()).Values.All(pair => JsonElement.DeepEquals(pair.Value, reset.Values[pair.Key])), "Restore all defaults resets every customisation category, including emote suggestions");
 Check(settings.AccessTokenProtected == "secret" && settings.WebSessionTokenProtected == "session" && settings.OpenTabs.SequenceEqual(["one", "two"]) &&
     settings.ActiveTab == "two" && settings.Volume == 33 && settings.MutedTabs.SequenceEqual(["two"]) && settings.Favorites.SequenceEqual(["favourite"]),
     "Restore all defaults keeps account, open streams, favourites and current audio");

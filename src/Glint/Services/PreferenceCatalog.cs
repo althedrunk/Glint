@@ -16,7 +16,7 @@ public static class PreferenceCatalog
     {
         ["Appearance"] = ["AccentColor", "BackgroundStyle", "InterfaceDensity", "SidebarWidth", "SidebarAvatarSize"],
         ["Chat"] = ["ShowTimestamps", "TimestampFormat", "ChatFontSize", "ChatFontFamily", "PauseChatOnHover", "ShowBadges",
-            "ShowSevenTvPaints", "ShowSevenTvBadges", "ChatMessageSpacing", "ChatLineSpacing", "EmoteScale", "EmoteAnimation", "AlternateChatRows"],
+            "ShowSevenTvPaints", "ShowSevenTvBadges", "ChatMessageSpacing", "ChatLineSpacing", "EmoteScale", "EmoteAnimation", "AlternateChatRows", "EmoteSuggestions"],
         ["Filtering"] = ["IgnoredWords", "IgnoredUsers", "ShowAnnouncements", "ShowSubscriptionNotices"],
         ["Player"] = ["PreferredQuality", "LowLatency", "BlockAds", "NewTabVolume", "UseLastVolumeForNewTabs", "SeekSeconds", "LongSeekSeconds", "ControlsHideSeconds"],
         ["Multiview"] = ["MultiviewCount", "MultiviewLayout", "MultiviewChats", "MultiviewDock", "MultiviewChatWidth", "MultiviewChatHeight"],

@@ -9,6 +9,27 @@ namespace Glint;
 public sealed partial class MainWindow
 {
     List<EmoteInfo>? _userEmotes; // your own Twitch emotes (subs, follower, bits), once logged in
+    Task<List<EmoteInfo>>? _userEmotesTask;
+
+    void ResetUserEmotes()
+    {
+        _userEmotes = null;
+        _userEmotesTask = null;
+        HideEmoteSuggestions();
+    }
+
+    async Task<List<EmoteInfo>> EnsureUserEmotesAsync()
+    {
+        if (_userEmotes != null) return _userEmotes;
+        if (!_irc.IsAuthenticated) return new();
+        var task = _userEmotesTask ??= TwitchSession.IsConnected ? TwitchSession.GetUserEmotesAsync()
+            : S.AccessToken is { } token ? TwitchAuth.GetUserEmotesAsync(token) : Task.FromResult(new List<EmoteInfo>());
+        List<EmoteInfo> emotes;
+        try { emotes = await task; }
+        catch (Exception ex) { Log.Error("User emotes", ex); emotes = new(); }
+        if (_userEmotesTask != task) return new();
+        return _userEmotes = emotes;
+    }
 
     void WireEmotePicker() => EmoteButton.Click += (_, _) => ShowEmotePicker();
 
@@ -17,22 +38,17 @@ public sealed partial class MainWindow
         if (ChatTarget is not { } tab) return;
         var picker = new EmotePicker();
         var flyout = new Flyout { Content = picker, Placement = FlyoutPlacementMode.TopEdgeAlignedRight };
+        bool closed = false;
         picker.EmoteChosen += e => InsertEmote(e.Name);
-        flyout.Closed += (_, _) => picker.Dispose();
+        flyout.Closed += (_, _) => { closed = true; picker.Dispose(); };
         TrackVideoPopup(flyout);
         picker.SetSections(EmoteSections(tab));
         flyout.ShowAt(EmoteButton);
 
         if (_userEmotes == null && _irc.IsAuthenticated)
         {
-            try
-            {
-                _userEmotes = TwitchSession.IsConnected ? await TwitchSession.GetUserEmotesAsync()
-                            : S.AccessToken is { } token ? await TwitchAuth.GetUserEmotesAsync(token)
-                            : new();
-            }
-            catch (Exception ex) { Log.Error("User emotes", ex); _userEmotes = new(); }
-            picker.SetSections(EmoteSections(tab));
+            await EnsureUserEmotesAsync();
+            if (!closed && _tabs.Contains(tab)) picker.SetSections(EmoteSections(tab));
         }
     }
 

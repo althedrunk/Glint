@@ -132,6 +132,10 @@ public sealed class TwitchIrc : IDisposable
 
     public Task SendMessageAsync(string channel, string text, string? replyParentId = null)
     {
+#if DEBUG
+        if (Environment.GetEnvironmentVariable("GLINT_DISABLE_CHAT_SEND") == "1")
+            throw new InvalidOperationException("Chat sending is disabled for this test run.");
+#endif
         text = text.Replace('\r', ' ').Replace('\n', ' ');
         var prefix = replyParentId != null ? $"@reply-parent-msg-id={replyParentId} " : "";
         return SendRawAsync($"{prefix}PRIVMSG #{channel.ToLowerInvariant()} :{text}");

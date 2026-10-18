@@ -253,6 +253,7 @@ public sealed partial class SettingsWindow
         Add("message spacing", Number("Message spacing", "Padding above and below each message", 0, 12, 1, S.ChatMessageSpacing, v => { S.ChatMessageSpacing = v; _window.OnChatStyleChanged(); }, " px"));
         Add("alternating rows background", ToggleRow("Alternating backgrounds", "A subtle background on every other message", S.AlternateChatRows, v => { S.AlternateChatRows = v; _window.OnChatStyleChanged(); }));
         Add("emote size scale", Number("Emote size", null, 0.75, 2, 0.05, S.EmoteScale, v => { S.EmoteScale = v; _window.OnChatStyleChanged(); }, "x"));
+        Add("colon emote autocomplete suggestions", ToggleRow("Emote suggestions", "Type : and at least two characters to find emotes while writing", S.EmoteSuggestions, v => { S.EmoteSuggestions = v; _window.OnChatPreferencesChanged(); }));
         Add("animated emotes animation hover still", Choice("Animate emotes", null, ["Always", "On hover", "Still"], S.EmoteAnimation, v => { S.EmoteAnimation = v; _window.OnChatStyleChanged(); }));
         Add("timestamps time", ToggleRow("Timestamps", null, S.ShowTimestamps, v => { S.ShowTimestamps = v; _window.OnChatStyleChanged(); }));
         Add("timestamp format seconds 12 24 hour", Choice("Time format", null, ["HH:mm", "HH:mm:ss", "h:mm tt", "h:mm:ss tt"], S.TimestampFormat, v => { S.TimestampFormat = v; _window.OnChatStyleChanged(); }));

@@ -50,6 +50,7 @@ public sealed class AppSettings
     public double ChatFontSize { get; set; } = 14;
     public string ChatFontFamily { get; set; } = "Segoe UI Variable Text";
     public bool PauseChatOnHover { get; set; } = true;
+    public bool EmoteSuggestions { get; set; } = true;
     public double ChatMessageSpacing { get; set; } = 3;
     public double ChatLineSpacing { get; set; } = 1;
     public double EmoteScale { get; set; } = 1;

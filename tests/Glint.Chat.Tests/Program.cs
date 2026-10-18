@@ -39,8 +39,35 @@ Check(!ChatFilters.IsIgnored(new() { Kind = MessageKind.UserNotice, NoticeId = "
 Settings.Current.ShowSubscriptionNotices = true;
 Check(!ChatFilters.IsIgnored(new() { Kind = MessageKind.UserNotice, NoticeId = "subgift" }), "Turning notices back on restores loaded messages");
 
+Check(EmoteCompletion.TryGetQuery(":pe", 3, 0, out var query) && query == new EmoteQuery(0, 3, "pe"), "Colon completion starts after two characters");
+Check(!EmoteCompletion.TryGetQuery(":p", 2, 0, out _) && !EmoteCompletion.TryGetQuery("", 0, 0, out _), "Short and empty input do not open suggestions");
+Check(!EmoteCompletion.TryGetQuery("https://example", 10, 0, out _) && !EmoteCompletion.TryGetQuery("12:30", 5, 0, out _), "URLs and times are not treated as emote searches");
+Check(!EmoteCompletion.TryGetQuery(":pe", 3, 2, out _) && !EmoteCompletion.TryGetQuery(":pe", 20, 0, out _), "Selected text and invalid caret positions are ignored");
+Check(EmoteCompletion.TryGetQuery("hi\t:pe there", 6, 0, out query) && query.Start == 3, "Colon completion recognises whitespace boundaries");
+Check(EmoteCompletion.Insert("hi\t:pe there", query, "PepeLaugh") == ("hi\tPepeLaugh there", 13), "Insertion preserves surrounding text and reuses an existing space");
+Check(EmoteCompletion.TryGetQuery(":Kappa", 3, 0, out query) && query.End == 6 &&
+    EmoteCompletion.Insert(":Kappa", query, "Kappa") == ("Kappa ", 6), "Completing inside a token replaces its suffix and adds one trailing space");
+Check(EmoteCompletion.TryGetQuery(":Kappa:", 7, 0, out query) && EmoteCompletion.Insert(":Kappa:", query, "Kappa").Text == "Kappa ", "Optional closing colons are removed when inserting");
+Check(EmoteCompletion.TryGetQuery(":Kappa, next", 3, 0, out query) && EmoteCompletion.Insert(":Kappa, next", query, "Kappa").Text == "Kappa, next", "Completing a token preserves following punctuation");
+EmoteInfo Emote(string name, EmoteProvider provider = EmoteProvider.SevenTV, bool global = false) => new() { Name = name, Provider = provider, IsGlobal = global };
+var channel = Emote("pepeChannel");
+var own = Emote("pepeTwitch", EmoteProvider.Twitch);
+var global = Emote("pepeGlobal", global: true);
+var matches = EmoteCompletion.Find("pe", [global, own, channel, Emote("unrelated"), Emote("pepeChannel", global: true)]);
+Check(matches.SequenceEqual([channel, own, global]), "Channel and user emotes precede globals and duplicate names keep the right source");
+Check(EmoteCompletion.Find("PE", [Emote("Pepe"), Emote("pepe")]).Count == 2, "Search ignores case while preserving distinct case-sensitive emote names");
+Check(EmoteCompletion.Find("pe", [Emote("xpe"), Emote("peLong")])[0].Name == "peLong", "Prefix matches rank above substring matches in the same source");
+Check(EmoteCompletion.Find("pe", Enumerable.Range(0, 100).Select(i => Emote("pe" + i))).Count == 50, "Suggestion lists have a bounded result count");
+
 namespace Glint
 {
+    public enum EmoteProvider { Twitch, SevenTV, BTTV, FFZ }
+    public sealed class EmoteInfo
+    {
+        public string Name { get; init; } = "";
+        public EmoteProvider Provider { get; init; }
+        public bool IsGlobal { get; init; }
+    }
     public sealed class AppSettings
     {
         public List<string> IgnoredWords { get; set; } = new();

@@ -370,7 +370,7 @@ public sealed partial class MainWindow
 
     void OnVideoInput(string cmd)
     {
-        if (cmd is "click" or "dblclick") CloseOverlayMenus();
+        if (cmd is "click" or "dblclick") { CloseOverlayMenus(); HideEmoteSuggestions(dismiss: true); }
         ShowPlayerOverlay();
         switch (cmd)
         {

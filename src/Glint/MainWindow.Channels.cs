@@ -243,6 +243,7 @@ public sealed partial class MainWindow
             if (tab == _active) UpdateInfoBar();
         }
         await tab.Chat.InitAsync(tab.Entry.Id!);
+        QueueEmoteSuggestions();
         if (!_tabs.Contains(tab)) return;
         if (tab.Chat.Emotes.SevenTvSetId is { } set) _stv.Subscribe(set);
         if (tab.Entry.Id is { } roomId) _stv.SubscribeChannel(roomId);

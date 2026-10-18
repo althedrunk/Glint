@@ -8,5 +8,6 @@
   <ItemGroup>
     <Compile Include="../../src/Glint/Chat/ChatFilters.cs" Link="ChatFilters.cs" />
     <Compile Include="../../src/Glint/Chat/Highlights.cs" Link="Highlights.cs" />
+    <Compile Include="../../src/Glint/Chat/EmoteCompletion.cs" Link="EmoteCompletion.cs" />
   </ItemGroup>
 </Project>

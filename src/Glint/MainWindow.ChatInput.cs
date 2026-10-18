@@ -17,11 +17,13 @@ public sealed partial class MainWindow
 
     void RestoreChatDraft()
     {
+        HideEmoteSuggestions();
         _updatingDraft = true;
         ChatInput.Text = ChatTarget?.Draft ?? "";
         ChatInput.SelectionStart = ChatInput.Text.Length;
         _updatingDraft = false;
         _completions = null;
+        _dismissedEmoteQuery = (ChatTarget, ChatInput.Text);
     }
 
     void SetChatRecipient(ChannelTab tab)
@@ -36,6 +38,7 @@ public sealed partial class MainWindow
 
     void UpdateChatInput()
     {
+        HideEmoteSuggestions();
         DropStaleReply();
         Chat.AllowReplies = _irc.IsAuthenticated && _active?.Vod == null;
         foreach (var pane in _multiviewChats.Values) pane.View.AllowReplies = _irc.IsAuthenticated && pane.Tab.Vod == null;
@@ -54,6 +57,17 @@ public sealed partial class MainWindow
 
     void ChatInput_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        var modifiers = CurrentModifiers();
+        if ((modifiers & (VirtualKeyModifiers.Control | VirtualKeyModifiers.Menu)) != 0)
+        {
+            if (e.Key == VirtualKey.Tab)
+                foreach (var definition in ShortcutMap.Definitions)
+                    foreach (var binding in ShortcutMap.Bindings(definition, S))
+                        if (ShortcutMap.TryParse(binding, out var key, out var expected) && key == e.Key && modifiers == expected)
+                        { e.Handled = RunShortcut(definition); return; }
+            return;
+        }
+        if (HandleEmoteSuggestionKey(e)) return;
         if (e.Key == VirtualKey.Tab)
         {
             var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift)
@@ -115,6 +129,7 @@ public sealed partial class MainWindow
 
     async void ChatInput_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Handled || e.Key == VirtualKey.Enter && _suggestionEnterPending) return;
         if (e.Key == VirtualKey.Escape && _replyTo != null) { CancelReply(); e.Handled = true; return; }
         if (e.Key != VirtualKey.Enter || ChatTarget is not { } target || target.Vod != null) return;
         e.Handled = true;
