@@ -1,0 +1,10 @@
+bin/
+obj/
+dist/
+*.user
+.vs/
+
+# fetched by tools/fetch-mpv.ps1, too big for git
+lib/mpv/libmpv-2.dll
+
+logo-preview.png
