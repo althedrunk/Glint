@@ -6,7 +6,12 @@ Glint is a native Twitch client for Windows, bringing streams and chat into a cu
 
 ## Download
 
-Download the [Windows x64 beta](https://github.com/althedrunk/Glint/releases/tag/v0.1.0-beta.1), extract the entire ZIP and open `Glint.exe`. No development tools or administrator access are needed. The first time you play a stream, Glint offers to download its video component directly from mpv's official release. This is a one-time setup.
+Download the [Windows x64 beta](https://github.com/althedrunk/Glint/releases).
+
+- **Installer:** run the `Setup.exe` download for a Start menu shortcut and normal Windows uninstall support.
+- **Portable:** extract the `Portable.zip` download into a writable folder and open `Glint.exe`. Keep the `Data` folder beside it; this holds your settings and downloaded player.
+
+No development tools or administrator access are needed. The first time you play a stream, Glint offers to download its video component directly from mpv's official release. This is a one-time setup.
 
 Requires 64-bit Windows 10 version 2004 or later, or Windows 11. Tested on Windows 11. Twitch sign-in also requires the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The beta is unsigned, so Windows may display an unknown-publisher warning.
 
@@ -47,7 +52,13 @@ For a development build:
 dotnet build src\Glint -c Debug
 ```
 
-To build the downloadable ZIP, run `powershell -ExecutionPolicy Bypass -File tools\package-release.ps1`. The archive and its checksum are written to `dist\releases`.
+To build the installer and portable ZIP, install [Inno Setup 7](https://jrsoftware.org/isinfo.php), then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\package-release.ps1 -InnoCompiler "C:\path\to\ISCC.exe"
+```
+
+Both downloads and their checksums are written to `dist\releases`. The script also accepts `INNO_SETUP_COMPILER` or finds a standard Inno Setup 7 installation. Runtime files are bundled inside `Glint.exe`; licence material is kept in `Docs`.
 
 The video library is downloaded separately by `fetch-mpv.ps1` from [shinchiro's mpv builds](https://github.com/shinchiro/mpv-winbuild-cmake).
 
@@ -90,7 +101,7 @@ Single-letter shortcuts are inactive while typing or using an input control.
 
 Glint uses Twitch's unofficial web API for channel information and playback. Changes to that API can affect compatibility. Clip creation requires the separate API login in Settings.
 
-Settings are stored in `%APPDATA%\Glint\settings.json`. Login tokens are encrypted for the current Windows user.
+The installed edition stores settings in `%APPDATA%\Glint\settings.json` and downloads in `%LOCALAPPDATA%\Glint`. The portable edition stores these in its adjacent `Data` folder. Keep that folder when updating or moving a portable copy. Login tokens are encrypted for the current Windows account; sign in again after moving to another PC. Uninstalling the installed edition preserves your settings and downloaded player.
 
 Glint is built with WinUI 3, [mpv](https://mpv.io) and Win2D. Thanks to [7TV](https://7tv.app), [BTTV](https://betterttv.com) and [FFZ](https://frankerfacez.com) for their emote services, and [Chatterino](https://chatterino.com) for inspiration.
 

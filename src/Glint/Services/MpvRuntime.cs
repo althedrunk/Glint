@@ -12,8 +12,8 @@ public static class MpvRuntime
     const long MaxArchiveBytes = 250 * 1024 * 1024;
     static readonly HttpClient Client = new() { Timeout = TimeSpan.FromMinutes(10) };
 
-    public static string LibraryPath => File.Exists(Path.Combine(AppContext.BaseDirectory, "libmpv-2.dll"))
-        ? Path.Combine(AppContext.BaseDirectory, "libmpv-2.dll")
+    public static string LibraryPath => File.Exists(Path.Combine(Paths.ApplicationDirectory, "libmpv-2.dll"))
+        ? Path.Combine(Paths.ApplicationDirectory, "libmpv-2.dll")
         : Path.Combine(Paths.LocalData, "player", "libmpv-2.dll");
     public static bool IsAvailable => File.Exists(LibraryPath);
 

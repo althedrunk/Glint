@@ -55,6 +55,23 @@ async Task Run(string name, byte[] zip, string metadata, bool success, Cancellat
 }
 try
 {
+    string app = Path.Combine(root, "portable");
+    string roaming = Path.Combine(root, "roaming");
+    string local = Path.Combine(root, "local");
+    Directory.CreateDirectory(Path.Combine(app, "Data"));
+    var installed = AppDirectories.Resolve(app, roaming, local);
+    if (installed.Roaming != Path.Combine(roaming, "Glint") || installed.LocalData != Path.Combine(local, "Glint"))
+        throw new Exception("FAIL: An unmarked Data folder changed installed paths");
+    File.WriteAllText(Path.Combine(app, "Data", "portable.flag"), "");
+    var portable = AppDirectories.Resolve(app, roaming, local);
+    if (portable.Roaming != Path.Combine(app, "Data") || portable.LocalData != portable.Roaming)
+        throw new Exception("FAIL: Portable data is not isolated");
+    string moved = Path.Combine(root, "moved");
+    Directory.Move(app, moved);
+    if (AppDirectories.Resolve(moved, roaming, local).Roaming != Path.Combine(moved, "Data"))
+        throw new Exception("FAIL: Moving a portable folder lost its data location");
+    if (Directory.Exists(roaming) || Directory.Exists(local)) throw new Exception("FAIL: Portable resolution touched installed data");
+    Console.WriteLine("PASS: Installed paths, portable isolation and moving the portable folder");
     var zip = Archive(Library());
     await Run("Verified x64 library, licence and provenance install; unrelated ZIP paths are ignored", zip, Metadata(zip), true);
     await Run("Wrong checksums never install a library", zip, Metadata(zip, "sha256:" + new string('0', 64)), false);
@@ -95,9 +112,4 @@ sealed class Handler(string metadata, byte[] archive) : HttpMessageHandler
 sealed class CancelProgress(CancellationTokenSource cancellation) : IProgress<double>
 {
     public void Report(double value) => cancellation.Cancel();
-}
-
-namespace Glint
-{
-    public static class Paths { public static string LocalData => Path.GetTempPath(); }
 }

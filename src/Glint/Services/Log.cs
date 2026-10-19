@@ -1,6 +1,5 @@
 namespace Glint;
 
-// Tiny append-only log in %LOCALAPPDATA%\Glint\glint.log.
 public static class Log
 {
     static readonly object Gate = new();
@@ -29,22 +28,5 @@ public static class Log
         {
             try { File.AppendAllText(FilePath, line + Environment.NewLine); } catch { }
         }
-    }
-}
-
-public static class Paths
-{
-    public static readonly string Roaming = Ensure(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Glint"));
-
-    public static readonly string LocalData = Ensure(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Glint"));
-
-    public static readonly string ImageCache = Ensure(Path.Combine(LocalData, "cache", "images"));
-
-    static string Ensure(string dir)
-    {
-        Directory.CreateDirectory(dir);
-        return dir;
     }
 }

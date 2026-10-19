@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Glint/Services/MpvRuntime.cs" Link="MpvRuntime.cs" />
+    <Compile Include="../../src/Glint/Services/Paths.cs" Link="Paths.cs" />
   </ItemGroup>
 </Project>
