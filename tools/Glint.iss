@@ -34,6 +34,18 @@ Name: desktopicon; Description: "Create a desktop shortcut"; GroupDescription: "
 Source: "{#PackageDir}\Glint.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PackageDir}\Docs\*"; DestDir: "{app}\Docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Glint ships as one Glint.exe. Loose runtime files left by an older build break it, so clear them first.
+Type: files; Name: "{app}\*.dll"
+Type: files; Name: "{app}\*.json"
+Type: files; Name: "{app}\*.pri"
+Type: files; Name: "{app}\*.winmd"
+Type: files; Name: "{app}\createdump.exe"
+Type: files; Name: "{app}\RestartAgent.exe"
+Type: filesandordirs; Name: "{app}\Assets"
+Type: filesandordirs; Name: "{app}\Microsoft.UI.Xaml"
+Type: filesandordirs; Name: "{app}\*-*"
+
 [Icons]
 Name: "{group}\Glint"; Filename: "{app}\Glint.exe"
 Name: "{autodesktop}\Glint"; Filename: "{app}\Glint.exe"; Tasks: desktopicon
