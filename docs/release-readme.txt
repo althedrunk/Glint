@@ -22,7 +22,7 @@ files in its normal per-user temp folder.
 
 REQUIREMENTS
 64-bit Windows 10 version 2004 or later, or Windows 11.
-This beta has been tested on Windows 11. An internet connection is required.
+Glint has been tested on Windows 11. An internet connection is required.
 Twitch sign-in needs the Microsoft Edge WebView2 Runtime. If it is missing,
 install the Evergreen Runtime from Microsoft's official download page:
 https://developer.microsoft.com/microsoft-edge/webview2/
@@ -46,5 +46,5 @@ SOURCE AND LICENCES
 https://github.com/althedrunk/Glint
 See Docs\LICENSE, Docs\THIRD-PARTY-NOTICES.md and Docs\licenses.
 
-This is an unsigned public beta. Windows may show an unknown-publisher warning.
+Glint is unsigned. Windows may show an unknown-publisher warning.
 Report bugs at https://github.com/althedrunk/Glint/issues.

@@ -6,14 +6,14 @@ Glint is a native Twitch client for Windows, bringing streams and chat into a cu
 
 ## Download
 
-Download the [Windows x64 beta](https://github.com/althedrunk/Glint/releases).
+Download the [latest Windows x64 release](https://github.com/althedrunk/Glint/releases/latest).
 
 - **Installer:** run the `Setup.exe` download for a Start menu shortcut and normal Windows uninstall support.
 - **Portable:** extract the `Portable.zip` download into a writable folder and open `Glint.exe`. Keep the `Data` folder beside it; this holds your settings and downloaded player.
 
 No development tools or administrator access are needed. The first time you play a stream, Glint offers to download its video component directly from mpv's official release. This is a one-time setup.
 
-Requires 64-bit Windows 10 version 2004 or later, or Windows 11. Tested on Windows 11. Twitch sign-in also requires the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The beta is unsigned, so Windows may display an unknown-publisher warning.
+Requires 64-bit Windows 10 version 2004 or later, or Windows 11. Tested on Windows 11. Twitch sign-in also requires the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). Glint is unsigned, so Windows may display an unknown-publisher warning.
 
 ## Overview
 
