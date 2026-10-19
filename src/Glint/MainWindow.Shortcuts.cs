@@ -86,6 +86,7 @@ public sealed partial class MainWindow
             case "longBack": SeekBy(-S.LongSeekSeconds); break;
             case "longForward": SeekBy(S.LongSeekSeconds); break;
             case "clip": _ = CreateClipAsync(); break;
+            case "home": ShowHome(); break;
             case "browse": if (_browseOpen) CloseBrowse(); else OpenBrowse(); break;
             case "multiview": SetMultiview(!_multiview); break;
             case "newTab": OpenNewTab(); break;

@@ -28,6 +28,35 @@ public sealed class ChatChannel
     // Our own USERSTATE, used to render locally-echoed messages.
     public Color SelfColor { get; private set; } = Color.FromArgb(255, 169, 112, 255);
     public string? SelfDisplayName { get; private set; }
+    public bool SelfIsMod { get; private set; }
+
+    // Room modes from ROOMSTATE. FollowersOnly is in minutes, -1 when off.
+    public bool EmoteOnly { get; private set; }
+    public bool SubsOnly { get; private set; }
+    public int FollowersOnly { get; private set; } = -1;
+    public int SlowSeconds { get; private set; }
+    public bool UniqueChat { get; private set; }
+    public event Action<ChatChannel>? ModesChanged;
+
+    // Short summary for the chat box, e.g. "emote only, slow 30s".
+    public string ModesText
+    {
+        get
+        {
+            var modes = new List<string>();
+            if (EmoteOnly) modes.Add("emote only");
+            if (SubsOnly) modes.Add("subscribers only");
+            if (FollowersOnly == 0) modes.Add("followers only");
+            else if (FollowersOnly > 0) modes.Add($"followers only ({FormatDuration(FollowersOnly * 60)})");
+            if (SlowSeconds > 0) modes.Add($"slow {FormatDuration(SlowSeconds)}");
+            if (UniqueChat) modes.Add("unique chat");
+            return string.Join(", ", modes);
+        }
+    }
+
+    // Your last sent message, until Twitch has had time to reject it.
+    ChatMessage? _lastEcho;
+    DateTime _lastEchoAt;
     List<BadgeRef> _selfBadges = new();
 
     static Task<Dictionary<string, (string Url, string Title)>>? _globalBadges;
@@ -187,14 +216,29 @@ public sealed class ChatChannel
             case "USERSTATE":
                 SelfColor = MessageBuilder.ParseColor(m.Tag("color"), SelfLogin ?? "");
                 SelfDisplayName = m.Tag("display-name");
+                SelfIsMod = m.Tag("badges").Split(',').Any(b => b.StartsWith("moderator/") || b.StartsWith("broadcaster/"));
                 _selfBadges = m.Tag("badges").Split(',', StringSplitOptions.RemoveEmptyEntries)
                     .Select(FindBadge).OfType<BadgeRef>().ToList();
                 break;
             case "NOTICE":
-                if (m.Trailing is { Length: > 0 } notice && !historical) Enqueue(ChatMessage.System(notice));
+                if (historical) break;
+                // msg_* notices are Twitch refusing a message you just sent (emote only, slow mode, ...).
+                if (m.Tag("msg-id").StartsWith("msg_") && _lastEcho is { } echo && DateTime.UtcNow - _lastEchoAt < TimeSpan.FromSeconds(5))
+                {
+                    Enqueue(new RejectOp(echo));
+                    _lastEcho = null;
+                }
+                if (m.Trailing is { Length: > 0 } notice) Enqueue(ChatMessage.System(notice));
                 break;
             case "ROOMSTATE":
                 if (RoomId == null && m.Tag("room-id") is { Length: > 0 } id) RoomId = id;
+                // A full ROOMSTATE on join, then only the tags that changed.
+                if (m.Tags.TryGetValue("emote-only", out var v)) EmoteOnly = v == "1";
+                if (m.Tags.TryGetValue("subs-only", out v)) SubsOnly = v == "1";
+                if (m.Tags.TryGetValue("followers-only", out v) && int.TryParse(v, out var mins)) FollowersOnly = mins;
+                if (m.Tags.TryGetValue("slow", out v) && int.TryParse(v, out var secs)) SlowSeconds = secs;
+                if (m.Tags.TryGetValue("r9k", out v)) UniqueChat = v == "1";
+                ModesChanged?.Invoke(this);
                 break;
         }
     }
@@ -207,10 +251,13 @@ public sealed class ChatChannel
         _ => $"{s / 86400}d",
     };
 
-    public void AddLocalEcho(string text, ChatMessage? replyTo = null)
+    public void AddLocalEcho(string text, ChatMessage? replyTo = null, IReadOnlyDictionary<string, EmoteInfo>? ownEmotes = null)
     {
         var login = SelfLogin ?? "";
-        Enqueue(MessageBuilder.Local(text, this, login, SelfDisplayName ?? login, SelfColor, _selfBadges, Settings.Current.UserId, replyTo));
+        var echo = MessageBuilder.Local(text, this, login, SelfDisplayName ?? login, SelfColor, _selfBadges, Settings.Current.UserId, replyTo, ownEmotes);
+        _lastEcho = echo;
+        _lastEchoAt = DateTime.UtcNow;
+        Enqueue(echo);
     }
 
     // Adds a ready-made message (used by the thread and mentions views).
@@ -277,6 +324,9 @@ public sealed class ChatChannel
                 case DeleteOp { MessageId: { } id }:
                     if (FindMessage(id) is { } deleted) deleted.Deleted = true;
                     break;
+                case RejectOp { Message: var rejected }:
+                    rejected.Deleted = true;
+                    break;
                 case ClearOp:
                     Messages.Clear();
                     added.Clear();
@@ -321,6 +371,8 @@ public sealed class ChatChannel
     }
 
     sealed record DeleteOp(string? MessageId, string? UserId);
+
+    sealed record RejectOp(ChatMessage Message);
 
     sealed class ClearOp
     {

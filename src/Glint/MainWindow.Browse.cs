@@ -188,10 +188,19 @@ public sealed partial class MainWindow
     // Stream cards stretch so each row fills the width; categories stay at their natural size.
     void SizeBrowseCards()
     {
-        if (BrowseGrid.ItemsPanelRoot is not ItemsWrapGrid panel) return;
-        if (!ReferenceEquals(BrowseGrid.ItemTemplate, Root.Resources["StreamCardTemplate"])) { panel.ItemWidth = double.NaN; return; }
+        if (!ReferenceEquals(BrowseGrid.ItemTemplate, Root.Resources["StreamCardTemplate"]))
+        {
+            if (BrowseGrid.ItemsPanelRoot is ItemsWrapGrid wrap) wrap.ItemWidth = double.NaN;
+            return;
+        }
+        SizeStreamCards(BrowseGrid);
+    }
+
+    static void SizeStreamCards(GridView grid)
+    {
+        if (grid.ItemsPanelRoot is not ItemsWrapGrid panel) return;
         const double gap = 12, min = 270;
-        double width = BrowseGrid.ActualWidth - 16; // leave room for the scrollbar
+        double width = grid.ActualWidth - 16; // leave room for the scrollbar
         int columns = Math.Max(1, (int)((width + gap) / (min + gap)));
         panel.ItemWidth = Math.Floor((width + gap) / columns);
     }

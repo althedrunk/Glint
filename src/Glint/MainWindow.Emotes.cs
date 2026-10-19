@@ -31,6 +31,21 @@ public sealed partial class MainWindow
         return _userEmotes = emotes;
     }
 
+    Dictionary<string, EmoteInfo>? _ownEmotesByName;
+    List<EmoteInfo>? _ownEmotesFrom;
+
+    async Task<IReadOnlyDictionary<string, EmoteInfo>> OwnEmotesAsync()
+    {
+        var emotes = await EnsureUserEmotesAsync();
+        if (_ownEmotesFrom != emotes)
+        {
+            _ownEmotesByName = new();
+            foreach (var e in emotes) _ownEmotesByName.TryAdd(e.Name, e);
+            _ownEmotesFrom = emotes;
+        }
+        return _ownEmotesByName!;
+    }
+
     void WireEmotePicker() => EmoteButton.Click += (_, _) => ShowEmotePicker();
 
     async void ShowEmotePicker()

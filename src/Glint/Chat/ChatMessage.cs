@@ -159,8 +159,9 @@ public static class MessageBuilder
 
     static string? Null(string s) => s.Length > 0 ? s : null;
 
+    // ownEmotes: your Twitch emotes by name. Twitch doesn't echo your messages, so nothing tags them for us.
     public static ChatMessage Local(string text, ChatChannel ch, string login, string display, Color color, List<BadgeRef> badges, string? userId,
-        ChatMessage? replyTo = null) => new()
+        ChatMessage? replyTo = null, IReadOnlyDictionary<string, EmoteInfo>? ownEmotes = null) => new()
     {
         UserId = userId,
         Channel = ch.Login,
@@ -172,7 +173,7 @@ public static class MessageBuilder
         DisplayName = display,
         NameColor = color,
         Badges = badges,
-        Fragments = Tokenize(StripReplyPrefix(text.StartsWith("/me ") ? text[4..] : text, replyTo), "", ch, userId),
+        Fragments = Tokenize(StripReplyPrefix(text.StartsWith("/me ") ? text[4..] : text, replyTo), "", ch, userId, ownEmotes),
         Kind = text.StartsWith("/me ") ? MessageKind.Action : MessageKind.Normal,
     };
 
@@ -205,7 +206,8 @@ public static class MessageBuilder
         return text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? text[prefix.Length..] : text;
     }
 
-    static List<Fragment> Tokenize(string text, string emotesTag, ChatChannel ch, string? userId)
+    static List<Fragment> Tokenize(string text, string emotesTag, ChatChannel ch, string? userId,
+        IReadOnlyDictionary<string, EmoteInfo>? ownEmotes = null)
     {
         // Twitch emote ranges are in Unicode code points; map them to UTF-16 indices.
         var twitch = new List<(int Start, int End, EmoteInfo Emote)>();
@@ -241,20 +243,21 @@ public static class MessageBuilder
         foreach (var (start, end, emote) in twitch)
         {
             if (start < pos) continue;
-            AddWords(text[pos..start], ch, result, userId);
+            AddWords(text[pos..start], ch, result, userId, ownEmotes);
             result.Add(new EmoteFragment(emote, new List<EmoteInfo>()));
             pos = end;
         }
-        AddWords(text[pos..], ch, result, userId);
+        AddWords(text[pos..], ch, result, userId, ownEmotes);
         return result;
     }
 
-    static void AddWords(string segment, ChatChannel ch, List<Fragment> into, string? userId)
+    static void AddWords(string segment, ChatChannel ch, List<Fragment> into, string? userId,
+        IReadOnlyDictionary<string, EmoteInfo>? ownEmotes = null)
     {
         foreach (var word in segment.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
-            // Channel emotes win; otherwise the sender's 7TV personal emotes.
-            if ((ch.Emotes.Find(word) ?? SevenTvCosmetics.PersonalEmote(userId, word)) is { } emote)
+            // Twitch emotes win (that's what everyone else sees), then channel emotes, then 7TV personal ones.
+            if ((ownEmotes?.GetValueOrDefault(word) ?? ch.Emotes.Find(word) ?? SevenTvCosmetics.PersonalEmote(userId, word)) is { } emote)
             {
                 if (emote.ZeroWidth && into.Count > 0 && into[^1] is EmoteFragment prev)
                     prev.Overlays.Add(emote);

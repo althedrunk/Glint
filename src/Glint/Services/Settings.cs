@@ -9,6 +9,10 @@ public sealed class AppSettings
 {
     public List<string> Favorites { get; set; } = new();
     public List<string> OpenTabs { get; set; } = new();
+    // What to reopen at launch: "Live" (tabs whose channel is live), "All", or "None" (the home page).
+    public string StartupTabs { get; set; } = "Live";
+    public List<string> RecentChannels { get; set; } = new();
+    public bool CheckForUpdates { get; set; } = true;
     public string? ActiveTab { get; set; }
 
     public double Volume { get; set; } = 70;

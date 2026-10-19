@@ -19,6 +19,9 @@ Requires 64-bit Windows 10 version 2004 or later, or Windows 11. Tested on Windo
 
 - Watch live streams and past broadcasts with hardware-accelerated playback, theatre and fullscreen modes.
 - Keep channels open in tabs or watch up to four streams in multiview, with flexible chat layouts and independent audio controls.
+- Home page with your live followed channels and recently watched ones.
+- Reopen live tabs, all tabs, or start on the home page at launch.
+- Built-in updates from GitHub releases, with release notes, for installed and portable copies.
 - Browse channels and categories, and create clips from the player.
 - Chat with Twitch, 7TV, BTTV and FFZ emotes, replies, mentions and searchable message history.
 - Customise the appearance, chat, notifications and shortcuts, with saved profiles and layouts.
@@ -81,6 +84,7 @@ These are the default bindings. Most can be changed in Settings under Shortcuts.
 | Shift+← / Shift+→ | Seek back or forward a minute in a past broadcast |
 | 0–9 | Jump to 0–90% of a past broadcast |
 | Alt+X | Clip the live stream (needs a login) |
+| Ctrl+H | Home |
 | Ctrl+B | Open or close Browse |
 | Ctrl+Shift+M | Enter or leave multiview |
 | Ctrl+T | Open an empty tab |

@@ -32,16 +32,26 @@ public static class WatchTime
                     properties = new { channel_id = channelId, broadcast_id = broadcastId, player = "site", user_id = userId, live = true, channel = login },
                 },
             });
-            using var req = new HttpRequestMessage(HttpMethod.Post, await SpadeUrlAsync())
-            {
-                Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["data"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(payload)) }),
-            };
-            req.Headers.TryAddWithoutValidation("User-Agent", BrowserAgent);
-            using var resp = await Net.Http.SendAsync(req);
+            var url = await SpadeUrlAsync();
+            HttpResponseMessage resp;
+            try { resp = await PostAsync(url, payload); }
+            // Spade drops idle keep-alive connections at about the minute mark, so the reused one can die mid-request.
+            catch (HttpRequestException) { resp = await PostAsync(url, payload); }
+            using var _ = resp;
             if (!resp.IsSuccessStatusCode) Log.Error($"Watch time for {login}: HTTP {(int)resp.StatusCode}");
             else if (Reported.Add(login)) Log.Info($"Counting watch time for {login}");
         }
         catch (Exception ex) { Log.Error($"Watch time for {login}", ex); }
+    }
+
+    static Task<HttpResponseMessage> PostAsync(string url, string payload)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["data"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(payload)) }),
+        };
+        req.Headers.TryAddWithoutValidation("User-Agent", BrowserAgent);
+        return Net.Http.SendAsync(req);
     }
 
     static async Task<string?> BroadcastIdAsync(string login)

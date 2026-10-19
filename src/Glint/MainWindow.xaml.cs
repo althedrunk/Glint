@@ -113,7 +113,9 @@ public sealed partial class MainWindow : Window
         RebuildSidebar();
 
         var activeLogin = S.ActiveTab;
-        foreach (var login in S.OpenTabs.ToList()) OpenChannel(login, activate: false);
+        var restore = S.StartupTabs == "None" ? new List<string>() : S.OpenTabs.ToList();
+        if (S.StartupTabs == "Live" && restore.Count > 0) restore = await LiveOnlyAsync(restore);
+        foreach (var login in restore) OpenChannel(login, activate: false);
         var toSelect = _tabs.FirstOrDefault(t => t.Login == activeLogin) ?? _tabs.FirstOrDefault();
         if (toSelect != null) Tabs.SelectedItem = toSelect.Item;
         SetMultiview(S.Multiview);
@@ -233,7 +235,11 @@ public sealed partial class MainWindow : Window
     // up with the tab row rather than the middle of the bar.
     void AlignTitleBar()
     {
-        if (Tabs.TabItems.FirstOrDefault() is not TabViewItem first || first.ActualHeight <= 0)
+        // The empty tab strip has extra padding; pull the + back to where the first tab would start.
+        NewTabButton.Margin = new Thickness(Tabs.TabItems.Count == 0 ? -8 : 4, 0, 0, 0);
+        // With no tabs, line up with the new-tab button instead.
+        FrameworkElement? first = Tabs.TabItems.FirstOrDefault() as TabViewItem ?? (FrameworkElement)NewTabButton;
+        if (first == null || first.ActualHeight <= 0)
         {
             BrandPanel.VerticalAlignment = TitleActions.VerticalAlignment = VerticalAlignment.Center;
             BrandPanel.Margin = TitleActions.Margin = new Thickness(0);
@@ -256,7 +262,13 @@ public sealed partial class MainWindow : Window
 
     void WireUi()
     {
-        SidebarToggle.Click += (_, _) => { S.SidebarCollapsed = !S.SidebarCollapsed; Settings.Save(); ApplyLayoutSettings(); };
+        SidebarToggle.Click += (_, _) =>
+        {
+            // Theatre and multiview hide the sidebar, so there the button brings it back instead.
+            if (SidebarHiddenByLayout) _sidebarPeek = !_sidebarPeek;
+            else { S.SidebarCollapsed = !S.SidebarCollapsed; Settings.Save(); }
+            ApplyLayoutSettings();
+        };
         SettingsButton.Click += (_, _) => ShowSettings();
         AccountButton.Click += (_, _) => ShowSettings();
 
@@ -289,7 +301,7 @@ public sealed partial class MainWindow : Window
             if (Tabs.SelectedItem is TabViewItem { Tag: ChannelTab t }) ActivateTab(t);
             else ActivateEmptyTab();
         };
-        Tabs.AddTabButtonClick += (_, _) => OpenNewTab();
+        NewTabButton.Click += (_, _) => OpenNewTab();
         Tabs.TabCloseRequested += (_, e) => CloseTabItem(e.Tab);
         Tabs.TabItemsChanged += (_, _) => SaveTabs();
 
@@ -319,6 +331,8 @@ public sealed partial class MainWindow : Window
         WireEmotePicker();
         WireEmoteSuggestions();
         WireBrowse();
+        WireHome();
+        WireUpdates();
         WireClips();
         WireSession();
         _overlay.BackgroundPressed += CloseOverlayMenus;
@@ -331,6 +345,7 @@ public sealed partial class MainWindow : Window
             if (Root.XamlRoot == null || VisualTreeHelper.GetOpenPopupsForXamlRoot(Root.XamlRoot).Count == 0) _cutoutWatch.Stop();
         };
         Tabs.SizeChanged += (_, _) => AlignTitleBar();
+        Tabs.TabItemsChanged += (_, _) => _dispatcher.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, AlignTitleBar);
         Tabs.TabItemsChanged += (_, _) => _dispatcher.TryEnqueue(AlignTitleBar);
         WireSplitter();
         WireKeyboard();
@@ -385,28 +400,47 @@ public sealed partial class MainWindow : Window
 
     // Layouts: normal, theatre (no sidebar or info bar), fullscreen (video only, or video + chat),
     // and chat-only. Everything that depends on them is decided here.
+    bool _sidebarPeek; // sidebar shown over theatre / multiview with the menu button
+    bool SidebarHiddenByLayout => S.Theatre && _active != null || MultiviewActive;
+
     void ApplyLayoutSettings()
     {
         bool fs = _fullscreen;
-        bool theatre = S.Theatre && !fs;
+        bool theatre = S.Theatre && !fs && _active != null; // nothing to watch on the home page
         bool chrome = !fs && !theatre;
-        TitleRow.Height = new GridLength(fs ? 0 : 44);
+        if (!SidebarHiddenByLayout) _sidebarPeek = false;
+        bool sidebar = !fs && (chrome && !MultiviewActive || _sidebarPeek);
+        TitleRow.Height = new GridLength(fs ? 0 : 48); // matches the Tall caption buttons
         TitleBar.Visibility = fs ? Visibility.Collapsed : Visibility.Visible;
         InfoBar.Visibility = chrome ? Visibility.Visible : Visibility.Collapsed;
         VideoArea.CornerRadius = new CornerRadius(chrome ? 8 : 0, 0, 0, 0);
 
         bool collapsed = S.SidebarCollapsed;
-        SidebarCol.Width = new GridLength(!chrome || MultiviewActive ? 0 : collapsed ? 56 : Math.Clamp(S.SidebarWidth, 200, 400));
-        Sidebar.Visibility = chrome && !MultiviewActive ? Visibility.Visible : Visibility.Collapsed;
+        SidebarCol.Width = new GridLength(!sidebar ? 0 : collapsed ? 56 : Math.Clamp(S.SidebarWidth, 200, 400));
+        Sidebar.Visibility = sidebar ? Visibility.Visible : Visibility.Collapsed;
         Sidebar.Padding = collapsed ? new Thickness(4, 2, 4, 8) : new Thickness(8, 2, 6, 8);
         AddBox.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        SidebarBrowseText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        SidebarBrowseButton.HorizontalAlignment = collapsed ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
-        SidebarBrowseButton.Padding = collapsed ? new Thickness(10, 8, 10, 8) : new Thickness(10, 7, 10, 7);
+        foreach (var (button, text) in new[] { (SidebarHomeButton, SidebarHomeText), (SidebarBrowseButton, SidebarBrowseText) })
+        {
+            text.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+            button.HorizontalAlignment = collapsed ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+            button.Padding = collapsed ? new Thickness(10, 8, 10, 8) : new Thickness(10, 7, 10, 7);
+        }
         AddCompactButton.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
         SidebarHeader.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         SidebarEmpty.Opacity = collapsed ? 0 : 1;
         AccountButton.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        // Collapsed, the footer stacks on the same centre line as the icons above it.
+        foreach (var button in new FrameworkElement[] { VersionButton, SettingsButton })
+        {
+            Grid.SetColumn(button, collapsed ? 0 : button == VersionButton ? 1 : 2);
+            Grid.SetColumnSpan(button, collapsed ? 3 : 1);
+            button.HorizontalAlignment = collapsed ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+        }
+        Grid.SetRow(VersionButton, collapsed ? 0 : 1);
+        // Line the title bar's menu button up with the sidebar icons below it.
+        BrandPanel.Padding = new Thickness(collapsed ? 10 : 8, 0, 10, 0);
+        UpdateVersionUi();
         ChannelList.ItemTemplate = (DataTemplate)Root.Resources[collapsed ? "ChannelCompact" : "ChannelExpanded"];
         ChannelList.Margin = collapsed ? new Thickness(-2, 0, -2, 0) : new Thickness(-4, 0, -4, 0);
 
@@ -433,6 +467,9 @@ public sealed partial class MainWindow : Window
         ChatPanel.Visibility = ChatShown && !MultiviewActive ? Visibility.Visible : Visibility.Collapsed;
         Splitter.Visibility = ChatShown && !MultiviewActive && !(S.ChatOnly && !_fullscreen) ? Visibility.Visible : Visibility.Collapsed;
         MultiviewRoot.Visibility = MultiviewActive ? Visibility.Visible : Visibility.Collapsed;
+        SidebarHomeButton.Background = empty ? (Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"]
+            : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        if (empty) UpdateHome();
         UpdateVideoBounds();
     }
 
@@ -443,7 +480,25 @@ public sealed partial class MainWindow : Window
 
     void UpdateAccountUi()
     {
-        AccountText.Text = _irc.IsAuthenticated && _chatLogin != null ? _chatLogin : "Log in";
+        var login = _irc.IsAuthenticated ? _chatLogin : null;
+        AccountText.Text = login ?? "Log in";
+        ToolTipService.SetToolTip(AccountButton, login != null ? $"{login} (account and settings)" : "Log in");
+        var me = login != null ? GetEntry(login) : null;
+        AccountAvatar.ImageSource = me?.Avatar;
+        AccountIcon.Visibility = me?.Avatar == null ? Visibility.Visible : Visibility.Collapsed;
+        if (me is { Known: false }) _ = LoadAccountAvatarAsync(me);
+        UpdateVersionUi();
+    }
+
+    async Task LoadAccountAvatarAsync(ChannelEntry me)
+    {
+        try
+        {
+            if ((await TwitchGql.GetUsersAsync(new List<string> { me.Login })).FirstOrDefault() is not { } info) return;
+            me.Update(info);
+            if (_chatLogin == me.Login) UpdateAccountUi();
+        }
+        catch (Exception ex) { Log.Error("Account avatar", ex); }
     }
 
     void ShowSettings()

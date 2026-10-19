@@ -24,6 +24,7 @@ public sealed partial class ChannelEntry : INotifyPropertyChanged
 
     string? _avatarUrl;
     ImageSource? _avatar;
+    public string? AvatarUrl => _avatarUrl;
     public ImageSource? Avatar => _avatar ??= _avatarUrl != null
         ? new BitmapImage(new Uri(_avatarUrl)) { DecodePixelWidth = 64, DecodePixelType = DecodePixelType.Logical }
         : null;

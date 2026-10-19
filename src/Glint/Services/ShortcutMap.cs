@@ -20,6 +20,7 @@ public static class ShortcutMap
         new("longBack", "Long seek back", ["Shift+Left"], true),
         new("longForward", "Long seek forward", ["Shift+Right"], true),
         new("clip", "Create clip", ["Alt+X"]),
+        new("home", "Home", ["Ctrl+H"]),
         new("browse", "Open Browse", ["Ctrl+B"]),
         new("multiview", "Toggle multiview", ["Ctrl+Shift+M"]),
         new("newTab", "New tab", ["Ctrl+T"]),

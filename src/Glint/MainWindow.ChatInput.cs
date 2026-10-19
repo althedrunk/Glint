@@ -52,7 +52,10 @@ public sealed partial class MainWindow
         bool canChat = _irc.IsAuthenticated && ChatTarget != null;
         ChatInput.IsEnabled = canChat;
         EmoteButton.IsEnabled = canChat;
-        ChatInput.PlaceholderText = canChat ? $"Message #{ChatTarget!.Login}" : "Log in to chat";
+        var modes = ChatTarget?.Chat.ModesText;
+        ChatInput.PlaceholderText = !canChat ? "Log in to chat"
+            : string.IsNullOrEmpty(modes) ? $"Message #{ChatTarget!.Login}"
+            : $"Message #{ChatTarget!.Login} ({modes})";
     }
 
     void ChatInput_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
@@ -142,9 +145,10 @@ public sealed partial class MainWindow
         if (replyTo != null && !text.StartsWith("@" + replyTo.Login + " ", StringComparison.OrdinalIgnoreCase))
             text = $"@{replyTo.Login} {text}"; // same as twitch.tv, so other clients show who it's for
         CancelReply();
+        var ownEmotes = await OwnEmotesAsync(); // before sending, so a quick rejection finds the echo
         await _irc.SendMessageAsync(target.Login, text, replyTo?.Id);
         // Twitch doesn't echo your own messages back, so add it locally (commands other than /me aren't messages).
-        if (!text.StartsWith('/') || text.StartsWith("/me ")) chat.AddLocalEcho(text, replyTo);
+        if (!text.StartsWith('/') || text.StartsWith("/me ")) chat.AddLocalEcho(text, replyTo, ownEmotes);
         if (MultiviewActive && _multiviewChats.TryGetValue(target, out var pane)) pane.View.ScrollToBottom();
         else if (target == _active) Chat.ScrollToBottom();
     }

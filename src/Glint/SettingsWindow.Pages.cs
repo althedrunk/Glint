@@ -225,12 +225,22 @@ public sealed partial class SettingsWindow
         BuildAppearancePage(); BuildChatPage(); BuildFilteringPage(); BuildPlayerPage();
         BuildMultiviewPage(); BuildNotificationsPage(); BuildShortcutsPage();
         AddOption("Profiles", "save restore named preferences setup", ProfilesCard(false));
+        string[] startup = ["Reopen live channels", "Reopen all tabs", "Start on the home page"];
+        string[] startupValues = ["Live", "All", "None"];
+        AddOption("General", "startup launch open restore previous session tabs home fresh", Choice("When Glint opens",
+            "Live channels skips tabs whose stream is offline", startup, startup[Math.Max(0, Array.IndexOf(startupValues, S.StartupTabs))],
+            v => S.StartupTabs = startupValues[Array.IndexOf(startup, v)]));
         var restore = new Button { Content = "Restore all defaults" };
         AutomationProperties.SetName(restore, "Restore all defaults");
         restore.Click += async (_, _) => await RestoreDefaultsAsync();
         AddOption("General", "restore reset all defaults original settings", Row("Restore defaults",
             "Reset all customisation settings. Keeps your login, open streams, current audio and saved setups. Asks for confirmation.", restore));
-        AddOption("About", "version mpv emotes", Card(Note($"Glint {typeof(App).Assembly.GetName().Version?.ToString(3)}. Video by mpv, emotes from 7TV, BTTV and FFZ.")));
+        var check = new Button { Content = "Check for updates" };
+        check.Click += (_, _) => _window.ShowUpdateDialog();
+        AddOption("About", "version update check release notes changelog", Row($"Glint {Updater.Current.ToString(3)}",
+            Updater.Available is { } update ? $"Version {update.Version.ToString(3)} is available" : "Video by mpv, emotes from 7TV, BTTV and FFZ.", check, bold: true));
+        AddOption("About", "automatic update check", ToggleRow("Check for updates automatically", "Looks for new releases on GitHub when Glint opens",
+            S.CheckForUpdates, v => S.CheckForUpdates = v));
         _building = false;
     }
 

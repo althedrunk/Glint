@@ -60,7 +60,8 @@ public sealed partial class MainWindow
     async Task RefreshLiveAsync(bool openTabsOnly = false)
     {
         if (_closing || _refreshingLive) return;
-        var logins = (openTabsOnly ? Enumerable.Empty<string>() : _entries.Values.Where(e => e.IsFavorite || e.IsFollowed).Select(e => e.Login))
+        var logins = (openTabsOnly ? Enumerable.Empty<string>() : _entries.Values.Where(e => e.IsFavorite || e.IsFollowed).Select(e => e.Login)
+                .Concat(S.RecentChannels.Take(HomeRecentCount)))
             .Concat(_tabs.Select(t => t.Login)).Distinct().ToList();
         if (logins.Count == 0) return;
         _refreshingLive = true;
@@ -82,6 +83,7 @@ public sealed partial class MainWindow
             }
             RebuildSidebar();
             UpdateInfoBar();
+            UpdateHome();
         }
         finally { _refreshingLive = false; }
     }
@@ -177,6 +179,7 @@ public sealed partial class MainWindow
 
         var entry = GetEntry(login);
         var chat = new ChatChannel(login) { SelfLogin = _chatLogin };
+        chat.ModesChanged += c => _dispatcher.TryEnqueue(() => { if (ChatTarget?.Chat == c) UpdateChatInput(); });
         chat.Mentioned += OnMentioned;
         _chats[login] = chat;
         var tab = new ChannelTab(entry, chat);
@@ -324,7 +327,7 @@ public sealed partial class MainWindow
     void OpenNewTab()
     {
         CloseBrowse();
-        var item = new TabViewItem { Header = "New tab", IconSource = new SymbolIconSource { Symbol = Symbol.Add } };
+        var item = new TabViewItem { Header = "New tab", IconSource = new FontIconSource { Glyph = "" } }; // a new tab shows the home page
         AutomationProperties.SetName(item, "New tab");
         Tabs.TabItems.Add(item);
         Tabs.SelectedItem = item;
@@ -376,6 +379,7 @@ public sealed partial class MainWindow
         CloseVodPanel();
         _host?.Hide();
         _active = tab;
+        NoteRecent(tab.Login);
         FocusMultiviewTab(tab);
         UpdateVolumeControl();
         SaveTabs();

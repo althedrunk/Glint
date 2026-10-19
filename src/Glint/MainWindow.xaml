@@ -72,6 +72,27 @@
                 </Grid>
             </DataTemplate>
 
+            <DataTemplate x:Key="RecentChannelTemplate" x:DataType="local:ChannelEntry">
+                <StackPanel Width="96" Padding="0,8,0,6" Spacing="6" Opacity="{x:Bind ItemOpacity, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind Tooltip, Mode=OneWay}">
+                    <Grid Width="56" Height="56" HorizontalAlignment="Center">
+                        <Border CornerRadius="28" Background="#26FFFFFF">
+                            <Border CornerRadius="28">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{x:Bind Avatar, Mode=OneWay}" Stretch="UniformToFill" />
+                                </Border.Background>
+                            </Border>
+                        </Border>
+                        <Ellipse Width="14" Height="14" Fill="{StaticResource GlintLiveBrush}" Stroke="#FF1C1C21" StrokeThickness="2"
+                                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
+                                 Visibility="{x:Bind LiveVisibility, Mode=OneWay}" />
+                    </Grid>
+                    <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" FontSize="12.5" FontWeight="SemiBold" TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}" FontSize="11.5" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                               Foreground="{StaticResource GlintSubtleTextBrush}" />
+                </StackPanel>
+            </DataTemplate>
+
             <DataTemplate x:Key="VodTemplate" x:DataType="local:VodItem">
                 <StackPanel Width="256" Spacing="6" Padding="0,0,0,8">
                     <Grid CornerRadius="6" Background="#FF26262C" Height="144">
@@ -134,7 +155,7 @@
         </Grid.Resources>
 
         <Grid.RowDefinitions>
-            <RowDefinition x:Name="TitleRow" Height="44" />
+            <RowDefinition x:Name="TitleRow" Height="48" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -152,15 +173,24 @@
                 <Image x:Name="BrandLogo" Width="20" Height="20" />
                 <TextBlock Text="Glint" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
             </StackPanel>
-            <TabView x:Name="Tabs" Grid.Column="1" VerticalAlignment="Bottom" Margin="4,0,0,0"
-                     IsAddTabButtonVisible="True" TabWidthMode="Equal" CanReorderTabs="True" CanDragTabs="True"
+            <TabView x:Name="Tabs" Grid.Column="1" VerticalAlignment="Center" Margin="4,0,0,0" Padding="0"
+                     IsAddTabButtonVisible="False" TabWidthMode="Equal" CanReorderTabs="True" CanDragTabs="True"
                      CloseButtonOverlayMode="OnPointerOver">
                 <TabView.Resources>
                     <x:Double x:Key="TabViewItemMaxWidth">220</x:Double>
                     <x:Double x:Key="TabViewItemMinWidth">120</x:Double>
                 </TabView.Resources>
                 <TabView.TabStripFooter>
-                    <Grid x:Name="DragRegion" Background="Transparent" MinWidth="64" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!-- our own + so it matches the menu button's size and sits centred on the tabs -->
+                        <Button x:Name="NewTabButton" Style="{StaticResource IconButton}" Content="&#xE710;" FontSize="14" Height="32" Margin="4,0,0,0"
+                                VerticalAlignment="Center" AutomationProperties.Name="New tab" ToolTipService.ToolTip="New tab (Ctrl+T)" />
+                        <Grid x:Name="DragRegion" Grid.Column="1" Background="Transparent" MinWidth="64" />
+                    </Grid>
                 </TabView.TabStripFooter>
             </TabView>
             <StackPanel x:Name="TitleActions" Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
@@ -183,6 +213,14 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <StackPanel Spacing="6">
+                <Button x:Name="SidebarHomeButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Background="Transparent" BorderThickness="0" Padding="10,7" CornerRadius="6"
+                        AutomationProperties.Name="Home" ToolTipService.ToolTip="Your live channels and recently watched (Ctrl+H)">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <FontIcon Glyph="&#xE80F;" FontSize="16" />
+                        <TextBlock x:Name="SidebarHomeText" Text="Home" FontSize="13.5" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="SidebarBrowseButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                         Background="Transparent" BorderThickness="0" Padding="10,7" CornerRadius="6"
                         AutomationProperties.Name="Browse" ToolTipService.ToolTip="Browse live channels and categories (Ctrl+B)">
@@ -217,19 +255,47 @@
                 <TextBlock x:Name="SidebarEmpty" Grid.Row="2" TextWrapping="Wrap" FontSize="12.5" Margin="4,4,4,0"
                            Foreground="{StaticResource GlintSubtleTextBrush}"
                            Text="Nothing here yet. Add a channel above, or log in to pull in the people you follow." />
-                <Grid x:Name="SidebarFooter" Grid.Row="3" ColumnSpacing="4">
+                <Grid x:Name="SidebarFooter" Grid.Row="3" ColumnSpacing="4" RowSpacing="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Button x:Name="AccountButton" AutomationProperties.Name="Account" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            Background="Transparent" BorderThickness="0" Padding="8,6" CornerRadius="6">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xE77B;" FontSize="15" />
-                            <TextBlock x:Name="AccountText" Text="Log in" FontSize="13" TextTrimming="CharacterEllipsis" />
+                    <Button x:Name="AccountButton" Grid.Row="1" AutomationProperties.Name="Account" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Background="Transparent" BorderThickness="0" Padding="4,5,8,5" CornerRadius="6">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="28" Height="28" CornerRadius="14" Background="#26FFFFFF">
+                                <Grid>
+                                    <FontIcon x:Name="AccountIcon" Glyph="&#xE77B;" FontSize="14" />
+                                    <Border CornerRadius="14">
+                                        <Border.Background>
+                                            <ImageBrush x:Name="AccountAvatar" Stretch="UniformToFill" />
+                                        </Border.Background>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="AccountText" Text="Log in" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="AccountSubText" FontSize="11.5" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="VersionButton" Grid.Row="1" Grid.Column="1" Background="Transparent" BorderThickness="0" Padding="6,4" CornerRadius="6"
+                            VerticalAlignment="Center" AutomationProperties.Name="Version and updates">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="UpdateIcon" Glyph="&#xE896;" FontSize="13" Foreground="{StaticResource GlintAccentBrush}" Visibility="Collapsed" />
+                            <TextBlock x:Name="VersionText" FontSize="12" Foreground="{StaticResource GlintSubtleTextBrush}" />
                         </StackPanel>
                     </Button>
-                    <Button x:Name="SettingsButton" AutomationProperties.Name="Settings" Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE713;"
+                    <Button x:Name="SettingsButton" AutomationProperties.Name="Settings" Grid.Row="1" Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE713;"
                             ToolTipService.ToolTip="Settings" />
                 </Grid>
             </Grid>
@@ -448,15 +514,29 @@
             </Grid>
 
             <Grid x:Name="EmptyState" Grid.Column="1" Grid.ColumnSpan="3" Background="#80101014" CornerRadius="8,0,0,0">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="340">
-                    <Image x:Name="EmptyLogo" Width="80" Height="80" Margin="0,0,0,6" />
-                    <TextBlock Text="What are we watching?" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                    <TextBlock Text="Choose a stream from the sidebar, browse, or enter a channel." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource GlintSubtleTextBrush}" />
-                    <TextBox x:Name="EmptyAddBox" PlaceholderText="Channel name or twitch.tv link" Margin="0,4,0,0" />
-                    <Button x:Name="EmptyBrowseButton" Content="Browse live channels" HorizontalAlignment="Center" />
-                    <TextBlock Text="Ctrl+T new tab, Ctrl+W close tab"
-                               FontSize="12" TextAlignment="Center" Foreground="{StaticResource GlintSubtleTextBrush}" Opacity="0.8" />
-                </StackPanel>
+                <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="HomePanel" Padding="24,0,8,24" Spacing="12" VerticalAlignment="Center">
+                        <StackPanel x:Name="HomeIntro" HorizontalAlignment="Center" Spacing="12" MaxWidth="340" Margin="0,24,0,12">
+                            <Image x:Name="EmptyLogo" Width="80" Height="80" Margin="0,0,0,6" />
+                            <TextBlock Text="What are we watching?" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock x:Name="HomeSubtitle" Text="Choose a stream from the sidebar, browse, or enter a channel." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource GlintSubtleTextBrush}" />
+                            <TextBox x:Name="EmptyAddBox" PlaceholderText="Channel name or twitch.tv link" Margin="0,4,0,0" />
+                            <Button x:Name="EmptyBrowseButton" Content="Browse live channels" HorizontalAlignment="Center" />
+                            <TextBlock Text="Ctrl+T new tab, Ctrl+W close tab"
+                                       FontSize="12" TextAlignment="Center" Foreground="{StaticResource GlintSubtleTextBrush}" Opacity="0.8" />
+                        </StackPanel>
+                        <TextBlock x:Name="HomeLiveHeader" Text="Live now" FontSize="18" FontWeight="SemiBold" Visibility="Collapsed" />
+                        <GridView x:Name="HomeLiveGrid" SelectionMode="None" IsItemClickEnabled="True" Visibility="Collapsed"
+                                  ItemTemplate="{StaticResource StreamCardTemplate}"
+                                  ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" />
+                        <TextBlock x:Name="HomeLiveEmpty" Text="None of your channels are live right now." Visibility="Collapsed"
+                                   Foreground="{StaticResource GlintSubtleTextBrush}" Margin="0,0,0,12" />
+                        <TextBlock x:Name="HomeRecentHeader" Text="Recently watched" FontSize="18" FontWeight="SemiBold" Visibility="Collapsed" />
+                        <GridView x:Name="HomeRecentGrid" SelectionMode="None" IsItemClickEnabled="True" Visibility="Collapsed"
+                                  ItemTemplate="{StaticResource RecentChannelTemplate}"
+                                  ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" />
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
             <Grid x:Name="BrowsePage" Grid.Column="1" Grid.ColumnSpan="3" Visibility="Collapsed" Background="#FF0F0F12" Padding="24,14,8,0" RowSpacing="14">
