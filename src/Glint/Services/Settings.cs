@@ -13,6 +13,13 @@ public sealed class AppSettings
     public string StartupTabs { get; set; } = "Live";
     public List<string> RecentChannels { get; set; } = new();
     public bool CheckForUpdates { get; set; } = true;
+    public bool SyncChatToVideo { get; set; } = true;
+    public bool MultiviewSync { get; set; }
+
+    public int[]? MiniPlayerBounds { get; set; }
+    // Go-live notifications: off unless a channel is switched on, or this covers everyone you follow.
+    public List<string> LiveAlertChannels { get; set; } = new();
+    public bool LiveAlertAllFollowed { get; set; }
     public string? ActiveTab { get; set; }
 
     public double Volume { get; set; } = 70;
@@ -32,6 +39,10 @@ public sealed class AppSettings
     public string AccentColor { get; set; } = "Purple";
     public string BackgroundStyle { get; set; } = "Dark";
     public string InterfaceDensity { get; set; } = "Comfortable";
+    public string CustomAccent { get; set; } = "#A970FF";
+    public string CardSize { get; set; } = "Medium";
+    public bool SidebarShowOffline { get; set; } = true;
+    public string SidebarSort { get; set; } = "Viewers";
     public double SidebarWidth { get; set; } = 244;
     public double SidebarAvatarSize { get; set; } = 32;
 
@@ -48,6 +59,13 @@ public sealed class AppSettings
     public string MultiviewDock { get; set; } = "Below";
     public double MultiviewChatWidth { get; set; } = 320;
     public double MultiviewChatHeight { get; set; } = 260;
+    // Dragged sizes as relative weights; empty means even.
+    public List<double> MultiviewVideoColumns { get; set; } = new();
+    public List<double> MultiviewVideoRows { get; set; } = new();
+    public List<double> MultiviewMainColumns { get; set; } = new();
+    public List<double> MultiviewMainRows { get; set; } = new();
+    public List<double> MultiviewChatColumns { get; set; } = new();
+    public List<double> MultiviewChatRows { get; set; } = new();
     public List<string> MultiviewChannels { get; set; } = new();
     public List<string> MultiviewPinnedChats { get; set; } = new();
     public bool ShowTimestamps { get; set; }

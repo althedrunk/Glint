@@ -199,7 +199,8 @@ public sealed partial class MainWindow
     static void SizeStreamCards(GridView grid)
     {
         if (grid.ItemsPanelRoot is not ItemsWrapGrid panel) return;
-        const double gap = 12, min = 270;
+        const double gap = 12;
+        double min = Appearance.CardMinWidth;
         double width = grid.ActualWidth - 16; // leave room for the scrollbar
         int columns = Math.Max(1, (int)((width + gap) / (min + gap)));
         panel.ItemWidth = Math.Floor((width + gap) / columns);

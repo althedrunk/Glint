@@ -31,7 +31,7 @@ public sealed partial class MainWindow
         if (!_tabs.Contains(tab) || _multiviewRecipient == tab) return;
         SaveChatDraft();
         _multiviewRecipient = tab;
-        MultiviewRecipient.SelectedItem = tab;
+        PlaceComposer();
         RestoreChatDraft();
         UpdateChatInput();
     }

@@ -20,6 +20,9 @@ public sealed partial class MainWindow
         }
         foreach (var entry in _entries.Values) entry.RefreshAppearance();
         ApplyLayoutSettings();
+        RebuildSidebar();
+        SizeBrowseCards();
+        SizeStreamCards(HomeLiveGrid);
     }
 
     internal void ApplyPlayerPreferences()

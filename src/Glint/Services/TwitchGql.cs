@@ -8,7 +8,10 @@ public sealed record StreamInfo(int Viewers, string Title, string? Game, DateTim
 
 public sealed record UserInfo(string Id, string Login, string DisplayName, string? AvatarUrl, StreamInfo? Stream);
 
-public sealed record VideoInfo(string Id, string Title, int LengthSeconds, DateTimeOffset CreatedAt, int Views, string? Thumbnail, string? Game);
+public sealed record VideoInfo(string Id, string Title, int LengthSeconds, DateTimeOffset CreatedAt, int Views, string? Thumbnail, string? Game,
+    string? ClipSlug = null, string? ClipBy = null);
+
+public sealed record ChannelAbout(string? Description, int Followers, bool Partner, string? Banner, DateTimeOffset? LastLive, string? LastGame);
 
 public sealed record CommentFragment(string Text, string? EmoteId);
 
@@ -22,7 +25,7 @@ public sealed record StreamVariant(string Name, string Url, int Bandwidth, bool 
 
 // Twitch's public web GQL endpoint (same one the website and Streamlink use). No login needed for
 // channel info, live status, badges and playback tokens.
-public static class TwitchGql
+public static partial class TwitchGql
 {
     const string Endpoint = "https://gql.twitch.tv/gql";
     public const string WebClientId = "kimne78kx3ncx6brgo4mv6wki5h1ko";
@@ -124,18 +127,36 @@ public static class TwitchGql
         return map;
     }
 
-    public static async Task<List<VideoInfo>> GetVideosAsync(string login, CancellationToken ct = default)
+    public static async Task<ChannelAbout?> GetChannelAboutAsync(string login, CancellationToken ct = default)
     {
         const string q = """
             query($login: String!) {
               user(login: $login) {
-                videos(first: 40, type: ARCHIVE, sort: TIME) {
+                description followers { totalCount } roles { isPartner } bannerImageURL
+                lastBroadcast { startedAt game { displayName } }
+              }
+            }
+            """;
+        var user = (await QueryAsync(q, new { login = login.ToLowerInvariant() }, ct))?.Obj("user") ?? default;
+        if (user.ValueKind != JsonValueKind.Object) return null;
+        var last = user.Obj("lastBroadcast");
+        return new ChannelAbout(user.Str("description"), user.Obj("followers").Int("totalCount"), user.Obj("roles").Bool("isPartner"),
+            user.Str("bannerImageURL"), DateTimeOffset.TryParse(last.Str("startedAt"), out var at) ? at : null, last.Obj("game").Str("displayName"));
+    }
+
+    // type is ARCHIVE (past broadcasts), HIGHLIGHT or UPLOAD.
+    public static async Task<List<VideoInfo>> GetVideosAsync(string login, string type = "ARCHIVE", CancellationToken ct = default)
+    {
+        string q = """
+            query($login: String!) {
+              user(login: $login) {
+                videos(first: 40, type: TYPE, sort: TIME) {
                   edges { node { id title lengthSeconds createdAt viewCount previewThumbnailURL(width: 320, height: 180) game { displayName } } }
                 }
               }
             }
             """;
-        var data = await QueryAsync(q, new { login = login.ToLowerInvariant() }, ct);
+        var data = await QueryAsync(q.Replace("TYPE", type), new { login = login.ToLowerInvariant() }, ct);
         var list = new List<VideoInfo>();
         foreach (var edge in data?.Obj("user").Obj("videos").Arr("edges") ?? Enumerable.Empty<JsonElement>())
         {
@@ -146,6 +167,56 @@ public static class TwitchGql
             list.Add(new VideoInfo(n.Str("id") ?? "", n.Str("title") ?? "", n.Int("lengthSeconds"), created, n.Int("viewCount"), thumb, n.Obj("game").Str("displayName")));
         }
         return list;
+    }
+
+    // period is LAST_DAY, LAST_WEEK, LAST_MONTH or ALL_TIME; most viewed first.
+    public static async Task<List<VideoInfo>> GetClipsAsync(string login, string period, CancellationToken ct = default)
+    {
+        string q = """
+            query($login: String!) {
+              user(login: $login) {
+                clips(first: 40, criteria: { period: PERIOD, sort: VIEWS_DESC }) {
+                  edges { node { slug title viewCount durationSeconds createdAt thumbnailURL(width: 320, height: 180) curator { displayName } game { displayName } } }
+                }
+              }
+            }
+            """;
+        var data = await QueryAsync(q.Replace("PERIOD", period), new { login = login.ToLowerInvariant() }, ct);
+        var list = new List<VideoInfo>();
+        foreach (var edge in data?.Obj("user").Obj("clips").Arr("edges") ?? Enumerable.Empty<JsonElement>())
+        {
+            var n = edge.Obj("node");
+            if (n.Str("slug") is not { } slug) continue;
+            DateTimeOffset.TryParse(n.Str("createdAt"), out var created);
+            list.Add(new VideoInfo("clip:" + slug, n.Str("title") ?? "", n.Int("durationSeconds"), created, n.Int("viewCount"),
+                n.Str("thumbnailURL"), n.Obj("game").Str("displayName"), slug, n.Obj("curator").Str("displayName")));
+        }
+        return list;
+    }
+
+    // Clips are plain MP4 files; the access token just has to ride along on the URL.
+    public static async Task<List<StreamVariant>> GetClipVariantsAsync(string slug, CancellationToken ct = default)
+    {
+        const string q = """
+            query($slug: ID!) {
+              clip(slug: $slug) {
+                videoQualities { quality frameRate sourceURL }
+                playbackAccessToken(params: { platform: "web", playerBackend: "mediaplayer", playerType: "site" }) { signature value }
+              }
+            }
+            """;
+        var clip = (await QueryAsync(q, new { slug }, ct))?.Obj("clip") ?? default;
+        var token = clip.Obj("playbackAccessToken");
+        if (token.Str("signature") is not { } sig || token.Str("value") is not { } value) return new();
+        var variants = new List<StreamVariant>();
+        foreach (var quality in clip.Arr("videoQualities"))
+        {
+            if (quality.Str("sourceURL") is not { } url || !int.TryParse(quality.Str("quality"), out var height)) continue;
+            double fps = quality.TryGetProperty("frameRate", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetDouble() : 30;
+            var name = fps >= 50 ? $"{height}p60" : $"{height}p";
+            variants.Add(new StreamVariant(name, $"{url}?sig={sig}&token={Uri.EscapeDataString(value)}", 0, variants.Count == 0, height));
+        }
+        return variants.OrderByDescending(v => v.Height).ToList();
     }
 
     public static async Task<List<StreamVariant>> GetVodVariantsAsync(string videoId, CancellationToken ct = default)

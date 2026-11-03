@@ -98,7 +98,8 @@ public sealed partial class MainWindow
         };
         _overlay.MuteButton.Click += (_, _) => ToggleMute();
         _overlay.ReloadButton.Click += (_, _) => Reload();
-        RetryButton.Click += (_, _) => Reload();
+        RetryButton.Click += (_, _) => { if (_active?.PoppedOut == true) BringBackFromMini(); else Reload(); };
+        _overlay.PopOutButton.Click += (_, _) => TogglePopOut();
         _overlay.FullscreenButton.Click += (_, _) => ToggleFullscreen();
         _overlay.TheatreButton.Click += (_, _) => ToggleTheatre();
         _overlay.ChatButton.Click += (_, _) => ToggleChat();
@@ -334,6 +335,13 @@ public sealed partial class MainWindow
     void RenderPlayerState()
     {
         if (_closing || _active is not { } tab) return;
+        if (tab.PoppedOut)
+        {
+            ShowVideoMessage("Playing in the mini player", tab.Entry.Avatar, retry: true);
+            RetryButton.Content = "Bring back";
+            UpdateVideoBounds();
+            return;
+        }
         if (tab.Playback.AdStatus == AdSkipStatus.Waiting)
         {
             ShowVideoMessage("Waiting for stream after ads", null, retry: false, loading: true);
@@ -402,7 +410,7 @@ public sealed partial class MainWindow
         if (_closing) return;
         if (MultiviewActive) { UpdateMultiviewVideoBounds(); return; }
         foreach (var tab in _tabs) if (tab != _active) tab.Playback.Host?.Hide();
-        bool visible = _host != null && !IsIconic(_hwnd) && !_vodPanelOpen && _videoPopups.Count == 0 && _active != null && _active.Playback.AdStatus != AdSkipStatus.Waiting && !S.ChatOnly
+        bool visible = _host != null && _active?.PoppedOut != true && !IsIconic(_hwnd) && !_vodPanelOpen && _videoPopups.Count == 0 && _active != null && _active.Playback.AdStatus != AdSkipStatus.Waiting && !S.ChatOnly
                        && MainArea.Visibility == Visibility.Visible
                        && _playerState is PlayerState.Playing or PlayerState.Buffering
                        && VideoArea.ActualWidth > 0 && Root.XamlRoot != null;
@@ -489,14 +497,46 @@ public sealed partial class MainWindow
             ? "\uE74F" : playback.Volume < 40 ? "\uE993" : "\uE767";
     }
 
+    bool _soloFullscreen; // one multiview video filling the screen
+    bool SoloFullscreen => _soloFullscreen && _fullscreen && _multiviewZoom != null && MultiviewActive;
+
     void ToggleFullscreen()
     {
         if (_active == null && !_fullscreen) return;
-        _fullscreen = !_fullscreen;
+        // In multiview, fullscreen means the video you're on; the toolbar has a button for all of them.
+        if (!_fullscreen && MultiviewActive && _multiviewSlots.Any(s => s.Tab == _active)) { FullscreenMultiviewVideo(_active!); return; }
+        SetFullscreen(!_fullscreen);
+    }
+
+    void SetFullscreen(bool on)
+    {
+        _fullscreen = on;
+        if (!on && _soloFullscreen)
+        {
+            _soloFullscreen = false;
+            _multiviewZoom = null;
+        }
         AppWindow.SetPresenter(_fullscreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped);
         ApplyLayoutSettings();
         FocusMultiviewPlayer();
         ShowPlayerOverlay();
+    }
+
+    void FullscreenMultiviewVideo(ChannelTab tab)
+    {
+        Tabs.SelectedItem = tab.Item;
+        _multiviewZoom = tab;
+        _soloFullscreen = true;
+        if (_fullscreen) ApplyMultiviewLayout();
+        else SetFullscreen(true);
+    }
+
+    void FullscreenAllStreams()
+    {
+        _soloFullscreen = false;
+        _multiviewZoom = null;
+        if (_fullscreen) ApplyMultiviewLayout();
+        else SetFullscreen(true);
     }
 
     // T: from fullscreen it drops back into theatre rather than all the way out.

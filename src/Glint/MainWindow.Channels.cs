@@ -23,6 +23,7 @@ sealed class ChannelTab
     public string Login => Entry.Login;
     public TabViewItem Item { get; set; } = null!;
     public TabPlayback Playback { get; } = new();
+    public bool PoppedOut { get; set; } // playing in the mini player
     public TextBlock HeaderText { get; } = new() { TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     public Button AudioButton { get; } = new();
     public ImageBrush AvatarBrush { get; } = new() { Stretch = Stretch.UniformToFill };
@@ -40,8 +41,9 @@ sealed class ChannelTab
     public double VodPosition { get; set; }
     public ChatChannel? Replay { get; set; }
     public VodReplay? ReplayEngine { get; set; }
-    public List<VideoInfo>? Videos { get; set; }
-    public DateTime VideosFetched { get; set; }
+    // Channel page lists by kind ("ARCHIVE", "HIGHLIGHT", "CLIPS:LAST_WEEK" ...), refetched after a few minutes.
+    public Dictionary<string, (DateTime At, List<VideoInfo> Items)> VideoCache { get; } = new();
+    public (DateTime At, ChannelAbout? About)? About { get; set; }
 }
 
 public sealed partial class MainWindow
@@ -72,8 +74,10 @@ public sealed partial class MainWindow
             foreach (var info in infos)
             {
                 var entry = GetEntry(info.Login);
-                bool wasLive = entry.IsLive;
+                bool wasLive = entry.IsLive, known = entry.Known;
                 entry.Update(info);
+                // Known: skip the first look after launch, when everyone already live would "go live".
+                if (known && !wasLive && entry.IsLive && (entry.IsFollowed || entry.IsFavorite)) _ = NotifyLiveAsync(entry);
                 if (_tabs.FirstOrDefault(t => t.Entry == entry) is not { } tab) continue;
                 UpdateTabHeader(tab);
                 // Start an open offline channel when it goes live.
@@ -90,10 +94,12 @@ public sealed partial class MainWindow
 
     void RebuildSidebar()
     {
-        var target = _entries.Values.Where(e => e.IsFavorite || e.IsFollowed)
-            .OrderByDescending(e => e.IsLive)
-            .ThenByDescending(e => e.Stream?.Viewers ?? 0)
-            .ThenBy(e => e.DisplayName, StringComparer.OrdinalIgnoreCase)
+        // Live first; pinned channels stay listed even while offline.
+        var shown = _entries.Values.Where(e => (e.IsFavorite || e.IsFollowed) && (S.SidebarShowOffline || e.IsLive || e.IsFavorite))
+            .OrderByDescending(e => e.IsLive);
+        var target = (S.SidebarSort == "Name"
+                ? shown.ThenBy(e => e.DisplayName, StringComparer.OrdinalIgnoreCase)
+                : shown.ThenByDescending(e => e.Stream?.Viewers ?? 0).ThenBy(e => e.DisplayName, StringComparer.OrdinalIgnoreCase))
             .ToList();
         // Move items rather than resetting the list, so scroll position and hover state survive a refresh.
         for (int i = 0; i < target.Count; i++)
@@ -148,6 +154,14 @@ public sealed partial class MainWindow
         }
         Item("Open in current tab", "", () => OpenChannelInCurrentTab(entry.Login));
         Item("Open in new tab", "\uE710", () => OpenChannel(entry.Login, true));
+        Item("View channel", "\uE77B", () =>
+        {
+            OpenChannel(entry.Login, true);
+            _dispatcher.TryEnqueue(() => _ = OpenVodPanelAsync());
+        });
+        var alert = new ToggleMenuFlyoutItem { Text = "Go-live alerts", IsChecked = HasLiveAlert(entry.Login), Icon = new FontIcon { Glyph = "" } };
+        alert.Click += (_, _) => SetLiveAlert(entry.Login, alert.IsChecked);
+        menu.Items.Add(alert);
         Item("Open on twitch.tv", "", () => Launch($"https://www.twitch.tv/{entry.Login}"));
         menu.Items.Add(new MenuFlyoutSeparator());
         Item(entry.IsFavorite ? "Remove" : "Pin to sidebar", entry.IsFavorite ? "" : "", () =>
@@ -274,6 +288,7 @@ public sealed partial class MainWindow
 
     void CloseTab(ChannelTab tab)
     {
+        if (tab == _miniTab) BringBackFromMini();
         int index = _tabs.IndexOf(tab);
         if (index < 0) return;
         bool active = tab == _active;

@@ -14,13 +14,15 @@ public static class PreferenceCatalog
 {
     public static readonly IReadOnlyDictionary<string, string[]> Sections = new Dictionary<string, string[]>
     {
-        ["Appearance"] = ["AccentColor", "BackgroundStyle", "InterfaceDensity", "SidebarWidth", "SidebarAvatarSize"],
+        ["Appearance"] = ["AccentColor", "CustomAccent", "BackgroundStyle", "InterfaceDensity", "SidebarWidth", "SidebarAvatarSize",
+            "CardSize", "SidebarShowOffline", "SidebarSort"],
         ["Chat"] = ["ShowTimestamps", "TimestampFormat", "ChatFontSize", "ChatFontFamily", "PauseChatOnHover", "ShowBadges",
-            "ShowSevenTvPaints", "ShowSevenTvBadges", "ChatMessageSpacing", "ChatLineSpacing", "EmoteScale", "EmoteAnimation", "AlternateChatRows", "EmoteSuggestions"],
+            "ShowSevenTvPaints", "ShowSevenTvBadges", "ChatMessageSpacing", "ChatLineSpacing", "EmoteScale", "EmoteAnimation", "AlternateChatRows", "EmoteSuggestions", "SyncChatToVideo"],
         ["Filtering"] = ["IgnoredWords", "IgnoredUsers", "ShowAnnouncements", "ShowSubscriptionNotices"],
         ["Player"] = ["PreferredQuality", "LowLatency", "BlockAds", "NewTabVolume", "UseLastVolumeForNewTabs", "SeekSeconds", "LongSeekSeconds", "ControlsHideSeconds"],
-        ["Multiview"] = ["MultiviewCount", "MultiviewLayout", "MultiviewChats", "MultiviewDock", "MultiviewChatWidth", "MultiviewChatHeight"],
-        ["Notifications"] = ["HighlightWords", "HighlightUsers", "FlashOnMention", "SoundOnMention", "SoundOnHighlight", "NotifyWhenFocused", "MentionTone", "HighlightTone", "NotificationVolume"],
+        ["Multiview"] = ["MultiviewCount", "MultiviewLayout", "MultiviewChats", "MultiviewDock", "MultiviewChatWidth", "MultiviewChatHeight",
+            "MultiviewVideoColumns", "MultiviewVideoRows", "MultiviewMainColumns", "MultiviewMainRows", "MultiviewChatColumns", "MultiviewChatRows"],
+        ["Notifications"] = ["LiveAlertAllFollowed", "HighlightWords", "HighlightUsers", "FlashOnMention", "SoundOnMention", "SoundOnHighlight", "NotifyWhenFocused", "MentionTone", "HighlightTone", "NotificationVolume"],
         ["Shortcuts"] = ["ShortcutOverrides"],
     };
 

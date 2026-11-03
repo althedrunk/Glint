@@ -127,6 +127,8 @@
                             AutomationProperties.Name="Toggle chat" ToolTipService.ToolTip="Chat (C)" />
                     <Button x:Name="MultiviewButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE8A9;"
                             AutomationProperties.Name="Multiview" ToolTipService.ToolTip="Multiview (Ctrl+Shift+M)" />
+                    <Button x:Name="PopOutButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE8A7;"
+                            AutomationProperties.Name="Mini player" ToolTipService.ToolTip="Mini player (Alt+P)" />
                     <Button x:Name="TheatreButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE7F4;"
                             AutomationProperties.Name="Theatre mode" ToolTipService.ToolTip="Theatre mode (T)" />
                     <Button x:Name="FullscreenButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE740;"

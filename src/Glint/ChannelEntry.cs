@@ -38,6 +38,8 @@ public sealed partial class ChannelEntry : INotifyPropertyChanged
     public bool IsFollowed { get => _isFollowed; set { _isFollowed = value; Raise(); } }
 
     public string Subtitle => Stream is { } s ? (s.Game ?? "Live") : "Offline";
+    public Visibility AlertVisibility => Settings.Current.LiveAlertChannels.Contains(Login) ? Visibility.Visible : Visibility.Collapsed;
+    public void RefreshAlert() => Raise(nameof(AlertVisibility));
     public string ViewersText => Stream is { } s ? FormatCount(s.Viewers) : "";
     public Visibility LiveVisibility => IsLive ? Visibility.Visible : Visibility.Collapsed;
     public double ItemOpacity => IsLive ? 1.0 : 0.5;

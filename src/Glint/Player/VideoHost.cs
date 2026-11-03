@@ -46,7 +46,33 @@ public sealed partial class VideoHost : IDisposable
         Hosts[Hwnd] = this;
     }
 
+    // Moved into the mini player: the main window's layout leaves it alone until it comes back.
+    public bool Detached { get; private set; }
+
+    public void Detach(IntPtr window)
+    {
+        Detached = true;
+        SetParent(Hwnd, window);
+        SetWindowRgn(Hwnd, IntPtr.Zero, true);
+        _cutoutKey = "";
+    }
+
+    public void Reattach(IntPtr parent)
+    {
+        SetParent(Hwnd, parent);
+        Detached = false;
+        Place(_bounds.X, _bounds.Y, _bounds.W, _bounds.H, false);
+    }
+
+    // Fills the mini player's client area.
+    public void Fill(int w, int h) => Place(0, 0, w, h, true);
+
     public void SetBounds(int x, int y, int w, int h, bool visible)
+    {
+        if (!Detached) Place(x, y, w, h, visible);
+    }
+
+    void Place(int x, int y, int w, int h, bool visible)
     {
         visible &= w > 0 && h > 0;
         if (_bounds == (x, y, w, h) && _visible == visible) return;
@@ -64,6 +90,7 @@ public sealed partial class VideoHost : IDisposable
     // they are rather than hiding the whole video. Rects are in the parent's client pixels.
     public void SetCutouts(IReadOnlyList<(int X, int Y, int W, int H)> popups)
     {
+        if (Detached) return;
         var local = new List<(int X, int Y, int W, int H)>();
         if (_visible)
             foreach (var p in popups)
@@ -93,7 +120,7 @@ public sealed partial class VideoHost : IDisposable
     // Re-asserts z-order above the XAML island without moving.
     public void BringToTop()
     {
-        if (_visible) SetWindowPos(Hwnd, HWND_TOP, _bounds.X, _bounds.Y, _bounds.W, _bounds.H, SWP_NOACTIVATE);
+        if (_visible && !Detached) SetWindowPos(Hwnd, HWND_TOP, _bounds.X, _bounds.Y, _bounds.W, _bounds.H, SWP_NOACTIVATE);
     }
 
     static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -140,6 +167,7 @@ public sealed partial class VideoHost : IDisposable
     [DllImport("gdi32.dll")] static extern int CombineRgn(IntPtr dest, IntPtr a, IntPtr b, int mode);
     [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr handle);
     [DllImport("user32.dll")] static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, bool redraw);
+    [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr child, IntPtr parent);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern ushort RegisterClassExW(ref WNDCLASSEXW wc);

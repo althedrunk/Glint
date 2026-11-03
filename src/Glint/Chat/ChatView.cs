@@ -353,7 +353,7 @@ public sealed partial class ChatView : UserControl, IDisposable
 
     bool DrainMessages()
     {
-        if (_channel is not { HasPending: true } channel) return false;
+        if (_channel is not { HasReady: true } channel) return false;
         var added = channel.Drain().Where(IsVisible).ToList();
         if (added.Count > 0 && (_hoverPaused || _target > 0.5f || _scroll > 0.5f))
         {

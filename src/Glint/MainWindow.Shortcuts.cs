@@ -27,6 +27,7 @@ public sealed partial class MainWindow
         ToolTipService.SetToolTip(_overlay.ReloadButton, ShortcutText("Reload", "reload"));
         ToolTipService.SetToolTip(_overlay.ClipButton, ShortcutText("Create clip", "clip"));
         ToolTipService.SetToolTip(_overlay.MultiviewButton, ShortcutText("Multiview", "multiview"));
+        ToolTipService.SetToolTip(_overlay.PopOutButton, ShortcutText("Mini player", "popout"));
         UpdateOverlayState();
     }
 
@@ -60,6 +61,7 @@ public sealed partial class MainWindow
         else if (e.Key == VirtualKey.Escape)
         {
             if (_browseOpen) CloseBrowse();
+            else if (SoloFullscreen) SetFullscreen(false);
             else if (_multiviewZoom != null) ZoomMultiview(null);
             else if (_fullscreen) ToggleFullscreen();
             else if (_vodPanelOpen) CloseVodPanel();
@@ -89,6 +91,7 @@ public sealed partial class MainWindow
             case "home": ShowHome(); break;
             case "browse": if (_browseOpen) CloseBrowse(); else OpenBrowse(); break;
             case "multiview": SetMultiview(!_multiview); break;
+            case "popout": TogglePopOut(); break;
             case "newTab": OpenNewTab(); break;
             case "closeTab": if (Tabs.SelectedItem is TabViewItem item) CloseTabItem(item); break;
             case "nextTab": CycleTab(1); break;

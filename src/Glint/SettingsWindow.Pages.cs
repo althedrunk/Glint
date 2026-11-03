@@ -147,6 +147,60 @@ public sealed partial class SettingsWindow
         if (_settingsContent.Children.Count == 0) _settingsContent.Children.Add(Note("No settings match. Try another word."));
     }
 
+    // The channels that send go-live notifications, each with a way to turn it off.
+    Border LiveAlertsCard()
+    {
+        var panel = new StackPanel { Spacing = 6 };
+        panel.Children.Add(new TextBlock { Text = "Go-live alerts", FontSize = 14 });
+        panel.Children.Add(Note("A Windows notification when one of these channels starts streaming. Turn alerts on with the Alerts button on a channel's page, or right-click a channel in the sidebar."));
+        if (S.LiveAlertChannels.Count == 0)
+            panel.Children.Add(Note("No channels yet."));
+        foreach (var login in S.LiveAlertChannels.ToList())
+        {
+            var row = new Grid { ColumnSpacing = 8, Margin = new Thickness(0, 2, 0, 0) };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(new TextBlock { Text = _window.DisplayNameFor(login), VerticalAlignment = VerticalAlignment.Center });
+            var remove = new Button { Content = "Turn off" };
+            AutomationProperties.SetName(remove, $"Turn off alerts for {login}");
+            remove.Click += (_, _) => { _window.SetLiveAlert(login, false); BuildRows(); RenderRows(); };
+            Grid.SetColumn(remove, 1);
+            row.Children.Add(remove);
+            panel.Children.Add(row);
+        }
+        return Card(panel);
+    }
+
+    Border CustomAccentRow()
+    {
+        var swatch = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(11),
+            Background = new SolidColorBrush(Appearance.ParseHex(S.CustomAccent) ?? Appearance.Accent) };
+        var picker = new ColorPicker
+        {
+            Color = Appearance.ParseHex(S.CustomAccent) ?? Appearance.Accent,
+            IsAlphaEnabled = false, IsMoreButtonVisible = false, IsColorSliderVisible = true, IsHexInputVisible = true,
+        };
+        picker.ColorChanged += (_, e) => swatch.Background = new SolidColorBrush(e.NewColor);
+        var flyout = new Flyout { Content = picker };
+        // Applying re-themes every window, so wait until the picker closes.
+        flyout.Closed += (_, _) =>
+        {
+            var hex = Appearance.ToHex(picker.Color);
+            if (hex == S.CustomAccent) return;
+            S.CustomAccent = hex;
+            Settings.Save();
+            _window.ApplyAppearance();
+            _window.OnChatStyleChanged();
+        };
+        var button = new Button
+        {
+            Flyout = flyout,
+            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { swatch, new TextBlock { Text = "Choose colour" } } },
+        };
+        AutomationProperties.SetName(button, "Choose custom accent colour");
+        return Row("Custom colour", "Pick any colour for buttons, highlights and the live ring", button);
+    }
+
     Border Choice(string title, string? description, IEnumerable<string> choices, string value, Action<string> set)
     {
         var box = new ComboBox { ItemsSource = choices.ToList(), SelectedItem = value, Width = 205, MaxDropDownHeight = 320 };
@@ -247,11 +301,24 @@ public sealed partial class SettingsWindow
     void BuildAppearancePage()
     {
         void Add(string text, FrameworkElement row) => AddOption("Appearance", text, row);
-        Add("accent colour color purple blue teal pink orange", Choice("Accent colour", null, Appearance.Accents, S.AccentColor, v => { S.AccentColor = v; _window.ApplyAppearance(); _window.OnChatStyleChanged(); }));
+        Add("accent colour color purple blue teal green yellow orange red pink custom", Choice("Accent colour", null, Appearance.Accents, S.AccentColor, v =>
+        {
+            S.AccentColor = v;
+            _window.ApplyAppearance();
+            _window.OnChatStyleChanged();
+            BuildRows(); RenderRows(); // shows or hides the custom colour row
+        }));
+        if (S.AccentColor == "Custom") Add("custom accent colour color picker", CustomAccentRow());
         Add("background dark grey black", Choice("Background", null, ["Dark", "Grey", "Black"], S.BackgroundStyle, v => { S.BackgroundStyle = v; _window.ApplyAppearance(); }));
         Add("sidebar spacing density compact comfortable", Choice("Sidebar spacing", null, ["Comfortable", "Compact"], S.InterfaceDensity, v => { S.InterfaceDensity = v; _window.ApplyAppearance(); }));
         Add("sidebar width", Number("Sidebar width", "Expanded channel list", 200, 400, 4, S.SidebarWidth, v => { S.SidebarWidth = v; _window.ApplyAppearance(); }, " px"));
         Add("sidebar avatar size", Number("Avatar size", "In the expanded channel list", 24, 48, 2, S.SidebarAvatarSize, v => { S.SidebarAvatarSize = v; _window.ApplyAppearance(); }, " px"));
+        Add("sidebar offline channels hide show", ToggleRow("Show offline channels", "Pinned channels always stay in the sidebar",
+            S.SidebarShowOffline, v => { S.SidebarShowOffline = v; _window.ApplyAppearance(); }));
+        Add("sidebar sort order viewers name alphabetical", Choice("Sort channels", "Live channels are always listed first", ["Viewers", "Name"],
+            S.SidebarSort, v => { S.SidebarSort = v; _window.ApplyAppearance(); }));
+        Add("thumbnail card size home browse", Choice("Thumbnail size", "Stream cards on Home and Browse", ["Small", "Medium", "Large"],
+            S.CardSize, v => { S.CardSize = v; _window.ApplyAppearance(); }));
     }
 
     void BuildChatPage()
@@ -265,6 +332,8 @@ public sealed partial class SettingsWindow
         Add("emote size scale", Number("Emote size", null, 0.75, 2, 0.05, S.EmoteScale, v => { S.EmoteScale = v; _window.OnChatStyleChanged(); }, "x"));
         Add("colon emote autocomplete suggestions", ToggleRow("Emote suggestions", "Type : and at least two characters to find emotes while writing", S.EmoteSuggestions, v => { S.EmoteSuggestions = v; _window.OnChatPreferencesChanged(); }));
         Add("animated emotes animation hover still", Choice("Animate emotes", null, ["Always", "On hover", "Still"], S.EmoteAnimation, v => { S.EmoteAnimation = v; _window.OnChatStyleChanged(); }));
+        Add("sync chat video delay latency behind ahead", ToggleRow("Sync chat with video",
+            "Holds live chat back by the stream's delay, so messages line up with what you're watching", S.SyncChatToVideo, v => S.SyncChatToVideo = v));
         Add("timestamps time", ToggleRow("Timestamps", null, S.ShowTimestamps, v => { S.ShowTimestamps = v; _window.OnChatStyleChanged(); }));
         Add("timestamp format seconds 12 24 hour", Choice("Time format", null, ["HH:mm", "HH:mm:ss", "h:mm tt", "h:mm:ss tt"], S.TimestampFormat, v => { S.TimestampFormat = v; _window.OnChatStyleChanged(); }));
         Add("pause chat on hover scrolling", ToggleRow("Pause chat on hover", "Resumes when you move away, unless you scroll up", S.PauseChatOnHover, v => { S.PauseChatOnHover = v; _window.OnChatPreferencesChanged(); }));
@@ -332,6 +401,9 @@ public sealed partial class SettingsWindow
         void Add(string text, FrameworkElement row) => AddOption("Notifications", text, row);
         Add("highlight words", ListEditor("Highlight words", "Mark matching messages and collect them in Mentions.", S.HighlightWords, v => S.HighlightWords = v, "Word or phrase"));
         Add("highlight users", ListEditor("Highlight users", "Collect messages from these people in Mentions.", S.HighlightUsers, v => S.HighlightUsers = v, "Username"));
+        Add("go live alerts notifications channels streams started", LiveAlertsCard());
+        Add("go live alerts every followed channel all", ToggleRow("Alert for every channel I follow",
+            "Otherwise only the channels above notify you", S.LiveAlertAllFollowed, v => S.LiveAlertAllFollowed = v));
         Add("flash taskbar mentions", ToggleRow("Flash the taskbar", "For mentions while Glint is in the background", S.FlashOnMention, v => S.FlashOnMention = v));
         Add("sound mentions", ToggleRow("Mention sound", null, S.SoundOnMention, v => S.SoundOnMention = v));
         Add("sound highlighted messages", ToggleRow("Highlight sound", "For highlighted words and users", S.SoundOnHighlight, v => S.SoundOnHighlight = v));

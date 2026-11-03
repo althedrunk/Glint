@@ -19,11 +19,19 @@ Requires 64-bit Windows 10 version 2004 or later, or Windows 11. Tested on Windo
 
 - Watch live streams and past broadcasts with hardware-accelerated playback, theatre and fullscreen modes.
 - Keep channels open in tabs or watch up to four streams in multiview, with flexible chat layouts and independent audio controls.
+- Sync multiview streams so streamers playing together show the same moment.
+- Drag to resize multiview videos and chats, or fullscreen a single stream.
+- Pick multiview channels from your live follows or a Twitch search, and type straight into the chat you want.
+- Pop the stream out into an always-on-top mini player (Alt+P).
 - Home page with your live followed channels and recently watched ones.
 - Reopen live tabs, all tabs, or start on the home page at launch.
 - Built-in updates from GitHub releases, with release notes, for installed and portable copies.
 - Browse channels and categories, and create clips from the player.
 - Chat with Twitch, 7TV, BTTV and FFZ emotes, replies, mentions and searchable message history.
+- Chat stays in sync with the video by holding messages back by the stream's delay.
+- Take part in channel-point predictions and polls from a card above chat.
+- Go-live notifications for the channels you choose.
+- Channel pages with past broadcasts, highlights and clips. Click a streamer's name to open one.
 - Customise the appearance, chat, notifications and shortcuts, with saved profiles and layouts.
 
 Watching and reading chat work without an account. Sign in with Twitch for sending messages, followed channels, your emotes and supported subscriber and Turbo benefits.
@@ -85,6 +93,7 @@ These are the default bindings. Most can be changed in Settings under Shortcuts.
 | 0–9 | Jump to 0–90% of a past broadcast |
 | Alt+X | Clip the live stream (needs a login) |
 | Ctrl+H | Home |
+| Alt+P | Mini player |
 | Ctrl+B | Open or close Browse |
 | Ctrl+Shift+M | Enter or leave multiview |
 | Ctrl+T | Open an empty tab |

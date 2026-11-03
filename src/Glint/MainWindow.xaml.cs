@@ -181,6 +181,7 @@ public sealed partial class MainWindow : Window
         _clockTimer.Stop();
         _vodTimer.Stop();
         _settingsWindow?.Close();
+        _mini?.Close();
         NotificationSound.Stop();
         HideEmoteSuggestions();
         _emoteSuggestions?.Dispose();
@@ -333,6 +334,9 @@ public sealed partial class MainWindow : Window
         WireBrowse();
         WireHome();
         WireUpdates();
+        WireChatSync();
+        WireLiveAlerts();
+        WireEngagement();
         WireClips();
         WireSession();
         _overlay.BackgroundPressed += CloseOverlayMenus;

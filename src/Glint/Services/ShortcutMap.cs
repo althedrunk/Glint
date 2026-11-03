@@ -23,6 +23,7 @@ public static class ShortcutMap
         new("home", "Home", ["Ctrl+H"]),
         new("browse", "Open Browse", ["Ctrl+B"]),
         new("multiview", "Toggle multiview", ["Ctrl+Shift+M"]),
+        new("popout", "Mini player", ["Alt+P"]),
         new("newTab", "New tab", ["Ctrl+T"]),
         new("closeTab", "Close tab", ["Ctrl+W"]),
         new("nextTab", "Next tab", ["Ctrl+Tab"]),

@@ -18,7 +18,8 @@ public sealed partial class MainWindow
         public ChannelTab? Tab;
         public Grid Root = new(), Area = new();
         public ComboBox Channel = new();
-        public Button Audio = new(), Zoom = new(), More = new(), Retry = new();
+        public Button Audio = new(), Zoom = new(), Fullscreen = new(), More = new(), Retry = new();
+        public Grid Header = new();
         public TextBlock Status = new();
     }
 
@@ -28,6 +29,7 @@ public sealed partial class MainWindow
         public Grid Root = new();
         public ChatView View = new();
         public Button Recipient = new(), Pin = new();
+        public Grid ComposerHost = new();
     }
 
     readonly List<MultiviewSlot> _multiviewSlots = new();
@@ -65,7 +67,7 @@ public sealed partial class MainWindow
 
         TrackVideoPopup(MultiviewOptions.Flyout);
         TrackVideoPopup(MultiviewAddFlyout);
-        foreach (var combo in new[] { MultiviewCount, MultiviewLayout, MultiviewChatMode, MultiviewDock, MultiviewRecipient })
+        foreach (var combo in new[] { MultiviewCount, MultiviewLayout, MultiviewChatMode, MultiviewDock })
             TrackVideoPopup(combo);
 
         MultiviewButton.Click += (_, _) => SetMultiview(true);
@@ -116,16 +118,11 @@ public sealed partial class MainWindow
             Settings.Save();
         };
         MultiviewPins.Click += (_, _) => ShowMultiviewPins();
+        MultiviewResetSizes.Click += (_, _) => ResetMultiviewSizes();
+        MultiviewFullscreenAll.Click += (_, _) => FullscreenAllStreams();
         MultiviewAdd.Click += (_, _) => PrepareMultiviewAdd();
-        MultiviewRecipient.SelectionChanged += (_, _) =>
-        {
-            if (!_multiviewUpdating && MultiviewRecipient.SelectedItem is ChannelTab tab) SetChatRecipient(tab);
-        };
-        MultiviewAddBox.KeyDown += (_, e) =>
-        {
-            AddBoxKey(MultiviewAddBox, e);
-            if (e.Handled) MultiviewAddFlyout.Hide();
-        };
+        WireMultiviewPicker();
+        WireMultiviewRecipient();
         MultiviewContent.SizeChanged += (_, _) => ApplyMultiviewLayout();
         WireMultiviewDivider();
     }
@@ -165,9 +162,12 @@ public sealed partial class MainWindow
         slot.Root.BorderThickness = new Thickness(2);
         slot.Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         slot.Root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var header = new Grid { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 28, 28, 33)), ColumnSpacing = 2, Padding = new Thickness(4) };
+        var header = slot.Header;
+        header.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 28, 28, 33));
+        header.ColumnSpacing = 2;
+        header.Padding = new Thickness(4);
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (int i = 0; i < 3; i++) header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        for (int i = 0; i < 4; i++) header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         slot.Channel.PlaceholderText = "Choose a channel";
         slot.Channel.HorizontalAlignment = HorizontalAlignment.Stretch;
         slot.Channel.MinWidth = 0;
@@ -188,12 +188,14 @@ public sealed partial class MainWindow
         };
         slot.Audio = MultiviewIcon("\uE767", "Mute view");
         slot.Audio.Click += (_, _) => { if (slot.Tab is { } tab) ToggleTabMute(tab); };
-        slot.Zoom = MultiviewIcon("\uE740", "Enlarge view");
+        slot.Zoom = MultiviewIcon("\uE8A3", "Enlarge view");
         slot.Zoom.Click += (_, _) => { if (slot.Tab is { } tab) ZoomMultiview(_multiviewZoom == tab ? null : tab); };
+        slot.Fullscreen = MultiviewIcon("\uE740", "Fullscreen view");
+        slot.Fullscreen.Click += (_, _) => { if (slot.Tab is { } tab) FullscreenMultiviewVideo(tab); };
         slot.More = MultiviewIcon("\uE712", "View options");
         slot.More.Click += (_, _) => ShowMultiviewSlotMenu(slot);
         header.Children.Add(slot.Channel);
-        foreach (var (button, column) in new[] { (slot.Audio, 1), (slot.Zoom, 2), (slot.More, 3) })
+        foreach (var (button, column) in new[] { (slot.Audio, 1), (slot.Zoom, 2), (slot.Fullscreen, 3), (slot.More, 4) })
         {
             Grid.SetColumn(button, column);
             header.Children.Add(button);
@@ -223,6 +225,7 @@ public sealed partial class MainWindow
 
     void SetMultiview(bool enabled)
     {
+        if (enabled) BringBackFromMini(); // multiview lays out every video itself
         SaveChatDraft();
         if (enabled && S.ChatOnly) SetChatOnly(false);
         _multiview = S.Multiview = enabled;
@@ -306,9 +309,8 @@ public sealed partial class MainWindow
             UpdateMultiviewSlotStatus(slot);
         }
         if (_multiviewRecipient == null || !_tabs.Contains(_multiviewRecipient)) _multiviewRecipient = _active ?? _tabs.FirstOrDefault();
-        MultiviewRecipient.ItemsSource = _tabs.ToList();
-        MultiviewRecipient.SelectedItem = _multiviewRecipient;
         foreach (var pane in _multiviewChats.Values) UpdateMultiviewChatHeader(pane);
+        PlaceComposer();
         _multiviewUpdating = false;
     }
 
@@ -326,7 +328,7 @@ public sealed partial class MainWindow
     void UpdateMultiviewSlotStatus(MultiviewSlot slot)
     {
         var tab = slot.Tab;
-        slot.Audio.IsEnabled = slot.Zoom.IsEnabled = slot.More.IsEnabled = tab != null;
+        slot.Audio.IsEnabled = slot.Zoom.IsEnabled = slot.Fullscreen.IsEnabled = slot.More.IsEnabled = tab != null;
         slot.Status.Text = tab == null ? "Choose an open channel or add another one" : tab.Playback.State switch
         {
             PlayerState.Loading => $"Loading {tab.Entry.DisplayName}…",
@@ -344,6 +346,8 @@ public sealed partial class MainWindow
             UpdateMultiviewAudio(tab);
             AutomationProperties.SetName(slot.Zoom, $"{(_multiviewZoom == tab ? "Restore" : "Enlarge")} view {tab.Entry.DisplayName}");
             AutomationProperties.SetName(slot.More, $"Options for view {tab.Entry.DisplayName}");
+            AutomationProperties.SetName(slot.Fullscreen, $"Fullscreen {tab.Entry.DisplayName}");
+            ToolTipService.SetToolTip(slot.Fullscreen, $"Fullscreen {tab.Entry.DisplayName}");
         }
     }
 
@@ -366,7 +370,6 @@ public sealed partial class MainWindow
         {
             bool active = MultiviewActive;
             MultiviewRoot.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
-            var destination = active ? MultiviewComposerInput : ChatInputHost;
             var actions = active ? MultiviewChatActionsHost : ChatActionsHost;
             if (!actions.Children.Contains(ChatHeaderActions))
             {
@@ -374,14 +377,9 @@ public sealed partial class MainWindow
                 MultiviewChatActionsHost.Children.Remove(ChatHeaderActions);
                 actions.Children.Add(ChatHeaderActions);
             }
-            if (!destination.Children.Contains(Composer))
-            {
-                ChatInputHost.Children.Remove(Composer);
-                MultiviewComposerInput.Children.Remove(Composer);
-                destination.Children.Add(Composer);
-            }
             if (!active)
             {
+                PlaceComposer();
                 foreach (var pane in _multiviewChats.Values) SetViewChannel(pane.View, null);
                 if (_active != null) SetViewChannel(Chat, _active.Replay ?? _active.Chat);
                 return;
@@ -395,13 +393,22 @@ public sealed partial class MainWindow
             _multiviewResolvedDock = S.MultiviewDock == "Auto"
                 ? MultiviewContent.ActualWidth >= 1200 && (slots.Count > 2 || MultiviewContent.ActualWidth > MultiviewContent.ActualHeight * 2) ? "Right" : "Below"
                 : S.MultiviewDock;
-            var chats = MultiviewChatTabs();
+            // One video fullscreen: just that video, no toolbar, headers or chats.
+            bool solo = SoloFullscreen;
+            MultiviewToolbar.Visibility = solo ? Visibility.Collapsed : Visibility.Visible;
+            MultiviewContent.Margin = new Thickness(solo ? 0 : 6);
+            foreach (var slot in _multiviewSlots)
+            {
+                slot.Header.Visibility = solo ? Visibility.Collapsed : Visibility.Visible;
+                slot.Root.BorderThickness = new Thickness(solo ? 0 : 2);
+            }
+            var chats = solo ? new List<ChannelTab>() : MultiviewChatTabs();
             if (S.MultiviewLayout == "Main stream" && _multiviewZoom == null && slots.Count > 1)
             {
                 slots = slots.OrderByDescending(s => s.Tab == _active).ToList();
-                MultiviewVideos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2.4, GridUnitType.Star) });
-                MultiviewVideos.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                for (int i = 1; i < slots.Count; i++) MultiviewVideos.RowDefinitions.Add(new RowDefinition());
+                MultiviewVideos.ColumnDefinitions.Add(new ColumnDefinition { Width = Weight(S.MultiviewMainColumns, 0, 2, 2.4) });
+                MultiviewVideos.ColumnDefinitions.Add(new ColumnDefinition { Width = Weight(S.MultiviewMainColumns, 1, 2) });
+                for (int i = 1; i < slots.Count; i++) MultiviewVideos.RowDefinitions.Add(new RowDefinition { Height = Weight(S.MultiviewMainRows, i - 1, slots.Count - 1) });
                 for (int i = 0; i < slots.Count; i++)
                 {
                     Grid.SetColumn(slots[i].Root, i == 0 ? 0 : 1);
@@ -409,19 +416,27 @@ public sealed partial class MainWindow
                     Grid.SetRowSpan(slots[i].Root, i == 0 ? slots.Count - 1 : 1);
                     MultiviewVideos.Children.Add(slots[i].Root);
                 }
+                AddSplitters(MultiviewVideos, true, S.MultiviewMainColumns);
+                AddSplitters(MultiviewVideos, false, S.MultiviewMainRows, cross: 1);
             }
             else
             {
                 double videoWidth = MultiviewContent.ActualWidth - (_multiviewResolvedDock == "Right" && chats.Count > 0 ? S.MultiviewChatWidth + 6 : 0);
                 int columns = slots.Count <= 1 || videoWidth is > 0 and < 660 ? 1 : 2;
-                for (int i = 0; i < columns; i++) MultiviewVideos.ColumnDefinitions.Add(new ColumnDefinition());
-                for (int i = 0; i < (slots.Count + columns - 1) / columns; i++) MultiviewVideos.RowDefinitions.Add(new RowDefinition());
+                int rows = (slots.Count + columns - 1) / columns;
+                for (int i = 0; i < columns; i++) MultiviewVideos.ColumnDefinitions.Add(new ColumnDefinition { Width = Weight(S.MultiviewVideoColumns, i, columns) });
+                for (int i = 0; i < rows; i++) MultiviewVideos.RowDefinitions.Add(new RowDefinition { Height = Weight(S.MultiviewVideoRows, i, rows) });
                 for (int i = 0; i < slots.Count; i++)
                 {
                     Grid.SetColumn(slots[i].Root, i % columns);
                     Grid.SetRow(slots[i].Root, i / columns);
                     Grid.SetRowSpan(slots[i].Root, 1);
                     MultiviewVideos.Children.Add(slots[i].Root);
+                }
+                if (_multiviewZoom == null)
+                {
+                    AddSplitters(MultiviewVideos, true, S.MultiviewVideoColumns);
+                    AddSplitters(MultiviewVideos, false, S.MultiviewVideoRows);
                 }
             }
             foreach (var slot in _multiviewSlots) UpdateMultiviewSlotStatus(slot);
@@ -448,12 +463,13 @@ public sealed partial class MainWindow
             MultiviewDivider.Visibility = MultiviewChatDock.Visibility = chats.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             var panes = chats.Select(GetMultiviewChat).ToList();
             foreach (var child in MultiviewChatDock.Children.ToList())
-                if (!panes.Any(p => p.Root == child)) MultiviewChatDock.Children.Remove(child);
+                if (child is GripSplitter || !panes.Any(p => p.Root == child)) MultiviewChatDock.Children.Remove(child);
             MultiviewChatDock.RowDefinitions.Clear();
             MultiviewChatDock.ColumnDefinitions.Clear();
             int chatColumns = right ? 1 : Math.Min(2, Math.Max(1, chats.Count));
-            for (int i = 0; i < chatColumns; i++) MultiviewChatDock.ColumnDefinitions.Add(new ColumnDefinition());
-            for (int i = 0; i < (chats.Count + chatColumns - 1) / chatColumns; i++) MultiviewChatDock.RowDefinitions.Add(new RowDefinition());
+            int chatRows = (chats.Count + chatColumns - 1) / chatColumns;
+            for (int i = 0; i < chatColumns; i++) MultiviewChatDock.ColumnDefinitions.Add(new ColumnDefinition { Width = Weight(S.MultiviewChatColumns, i, chatColumns) });
+            for (int i = 0; i < chatRows; i++) MultiviewChatDock.RowDefinitions.Add(new RowDefinition { Height = Weight(S.MultiviewChatRows, i, chatRows) });
             for (int i = 0; i < chats.Count; i++)
             {
                 var pane = panes[i];
@@ -461,8 +477,11 @@ public sealed partial class MainWindow
                 Grid.SetColumn(pane.Root, i % chatColumns); Grid.SetRow(pane.Root, i / chatColumns);
                 if (!MultiviewChatDock.Children.Contains(pane.Root)) MultiviewChatDock.Children.Add(pane.Root);
             }
+            AddSplitters(MultiviewChatDock, true, S.MultiviewChatColumns);
+            AddSplitters(MultiviewChatDock, false, S.MultiviewChatRows);
             foreach (var pane in _multiviewChats.Values) SetViewChannel(pane.View, chats.Contains(pane.Tab) ? pane.Tab.Replay ?? pane.Tab.Chat : null);
             ResizeMultiviewDock();
+            PlaceComposer();
             _vodTimer?.Start();
         }
         finally { _multiviewLayingOut = false; }
@@ -485,6 +504,19 @@ public sealed partial class MainWindow
         pane.Root.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 28, 28, 33));
         pane.Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         pane.Root.RowDefinitions.Add(new RowDefinition());
+        pane.Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        pane.Root.BorderThickness = new Thickness(1.5);
+        pane.Root.CornerRadius = new CornerRadius(6);
+        pane.ComposerHost.Padding = new Thickness(6, 4, 6, 6);
+        Grid.SetRow(pane.ComposerHost, 2);
+        pane.Root.Children.Add(pane.ComposerHost);
+        // Clicking anywhere in a chat makes it the one you write in.
+        pane.Root.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) =>
+        {
+            if (_multiviewRecipient == tab) return;
+            SetChatRecipient(tab);
+            ChatInput.Focus(FocusState.Programmatic);
+        }), true);
         var header = new Grid { Padding = new Thickness(6, 2, 6, 2) };
         header.ColumnDefinitions.Add(new ColumnDefinition());
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -636,6 +668,7 @@ public sealed partial class MainWindow
         if (_multiviewRecipient == tab) _multiviewRecipient = _tabs.FirstOrDefault();
         if (_multiviewChats.Remove(tab, out var pane))
         {
+            pane.ComposerHost.Children.Remove(Composer);
             MultiviewChatDock.Children.Remove(pane.Root);
             pane.View.Dispose();
         }
@@ -686,6 +719,11 @@ public sealed partial class MainWindow
     void OnTabVideoInput(ChannelTab tab, string command)
     {
         if (_closing) return;
+        if (tab.PoppedOut)
+        {
+            if (command == "dblclick") BringBackFromMini();
+            return;
+        }
         if (MultiviewActive && _multiviewSlots.Any(s => s.Tab == tab))
         {
             if (command is "click" or "dblclick")

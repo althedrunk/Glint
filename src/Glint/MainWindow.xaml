@@ -44,13 +44,42 @@
                         </Border>
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" FontWeight="SemiBold" FontSize="13.5" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" FontWeight="SemiBold" FontSize="13.5" TextTrimming="CharacterEllipsis" />
+                            <FontIcon Glyph="&#xEA8F;" FontSize="10" VerticalAlignment="Center" Foreground="{StaticResource GlintSubtleTextBrush}"
+                                      Visibility="{x:Bind AlertVisibility, Mode=OneWay}" ToolTipService.ToolTip="Go-live alerts on" />
+                        </StackPanel>
                         <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}" FontSize="12" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center"
                                 Visibility="{x:Bind LiveVisibility, Mode=OneWay}">
                         <Ellipse Width="7" Height="7" Fill="{StaticResource GlintLiveBrush}" />
                         <TextBlock Text="{x:Bind ViewersText, Mode=OneWay}" FontSize="12" />
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+
+            <DataTemplate x:Key="PickTemplate" x:DataType="local:PickItem">
+                <Grid Padding="4,6" ColumnSpacing="10" Background="Transparent" Opacity="{x:Bind ItemOpacity}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="32" Height="32" CornerRadius="16" Background="#26FFFFFF">
+                        <Border CornerRadius="16">
+                            <Border.Background>
+                                <ImageBrush ImageSource="{x:Bind Avatar}" Stretch="UniformToFill" />
+                            </Border.Background>
+                        </Border>
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" FontSize="13.5" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{x:Bind Subtitle}" FontSize="12" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" Visibility="{x:Bind LiveVisibility}">
+                        <Ellipse Width="7" Height="7" Fill="{StaticResource GlintLiveBrush}" />
+                        <TextBlock Text="{x:Bind ViewersText}" FontSize="12" />
                     </StackPanel>
                 </Grid>
             </DataTemplate>
@@ -332,6 +361,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <Button x:Name="InfoAvatarButton" Padding="0" CornerRadius="22" Background="Transparent" BorderThickness="0"
+                            AutomationProperties.Name="View channel" ToolTipService.ToolTip="View channel">
                     <Grid Width="44" Height="44">
                         <Ellipse x:Name="InfoLiveRing" Stroke="{StaticResource GlintLiveBrush}" StrokeThickness="2" Visibility="Collapsed" />
                         <Border Width="38" Height="38" CornerRadius="19" Background="#26FFFFFF">
@@ -342,14 +373,18 @@
                             </Border>
                         </Border>
                     </Grid>
+                    </Button>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock x:Name="InfoName" FontWeight="SemiBold" FontSize="15" />
+                            <HyperlinkButton x:Name="InfoNameButton" Padding="0" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                             AutomationProperties.Name="View channel" ToolTipService.ToolTip="View channel">
+                                <TextBlock x:Name="InfoName" FontWeight="SemiBold" FontSize="15" />
+                            </HyperlinkButton>
                             <Border x:Name="LiveBadge" Background="{StaticResource GlintLiveBrush}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" Visibility="Collapsed">
                                 <TextBlock Text="LIVE" FontSize="10" FontWeight="Bold" Foreground="White" />
                             </Border>
                             <Border x:Name="VodBadge" Background="#FF3A3A44" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" Visibility="Collapsed">
-                                <TextBlock Text="VOD" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                <TextBlock x:Name="VodBadgeText" Text="VOD" FontSize="10" FontWeight="Bold" Foreground="White" />
                             </Border>
                         </StackPanel>
                         <TextBlock x:Name="InfoTitle" FontSize="13" TextTrimming="CharacterEllipsis" />
@@ -357,8 +392,8 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                         <Button x:Name="GoLiveButton" AutomationProperties.Name="Back to live" Content="Back to live" Visibility="Collapsed" Margin="0,0,6,0" />
-                        <Button x:Name="VideosButton" AutomationProperties.Name="Past broadcasts" Style="{StaticResource IconButton}" Content="&#xE81C;"
-                                ToolTipService.ToolTip="Past broadcasts" />
+                        <Button x:Name="VideosButton" AutomationProperties.Name="Channel and past broadcasts" Style="{StaticResource IconButton}" Content="&#xE81C;"
+                                ToolTipService.ToolTip="Channel and past broadcasts" />
                         <Button x:Name="ChatOnlyButton" AutomationProperties.Name="Chat only" Style="{StaticResource IconButton}" Content="&#xE8A0;"
                                 ToolTipService.ToolTip="Hide video (chat only)" />
                         <Button x:Name="MultiviewButton" AutomationProperties.Name="Multiview" Style="{StaticResource IconButton}" Content="&#xE8A9;"
@@ -408,6 +443,11 @@
                                 ToolTipService.ToolTip="Show video" Visibility="Collapsed" Height="28" />
                 </Grid>
                 <chat:ChatView x:Name="Chat" Grid.Row="1" />
+                <!-- active prediction or poll, floating over the top of chat like twitch.tv -->
+                <Border x:Name="EngageCard" Grid.Row="1" VerticalAlignment="Top" Margin="8,8,8,0" Padding="12,10,8,12" CornerRadius="8"
+                        Background="#FF24242B" BorderBrush="#26FFFFFF" BorderThickness="1" Visibility="Collapsed">
+                    <StackPanel x:Name="EngageContent" Spacing="8" />
+                </Border>
                 <Grid x:Name="ChatInputHost" Grid.Row="2" Padding="10,6,10,10">
                     <!-- moved as one piece between here and the multiview composer -->
                     <Grid x:Name="Composer" RowSpacing="4">
@@ -445,7 +485,7 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <Grid Padding="10,6" ColumnSpacing="8" Background="{StaticResource GlintPanelBrush}">
+                    <Grid x:Name="MultiviewToolbar" Padding="10,6" ColumnSpacing="8" Background="{StaticResource GlintPanelBrush}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
@@ -469,10 +509,29 @@
                             <Button x:Name="MultiviewAdd" Style="{StaticResource IconButton}" Content="&#xE710;" AutomationProperties.Name="Add multiview channel" ToolTipService.ToolTip="Add a channel">
                                 <Button.Flyout>
                                     <Flyout x:Name="MultiviewAddFlyout">
-                                        <TextBox x:Name="MultiviewAddBox" Width="240" PlaceholderText="Channel name or link" AutomationProperties.Name="Multiview channel name" />
+                                        <StackPanel Width="330" Spacing="8">
+                                            <TextBox x:Name="MultiviewAddBox" PlaceholderText="Search Twitch or type a channel" AutomationProperties.Name="Multiview channel name" />
+                                            <TextBlock x:Name="MultiviewPickHeader" FontSize="11" FontWeight="SemiBold" CharacterSpacing="60"
+                                                       Foreground="{StaticResource GlintSubtleTextBrush}" Margin="4,4,0,0" />
+                                            <ListView x:Name="MultiviewPickList" MaxHeight="380" SelectionMode="None" IsItemClickEnabled="True"
+                                                      ItemTemplate="{StaticResource PickTemplate}" Margin="-8,0,-8,0" />
+                                            <TextBlock x:Name="MultiviewPickEmpty" TextWrapping="Wrap" FontSize="12.5" Margin="4,0,4,4"
+                                                       Foreground="{StaticResource GlintSubtleTextBrush}" Visibility="Collapsed" />
+                                        </StackPanel>
                                     </Flyout>
                                 </Button.Flyout>
                             </Button>
+                            <ToggleButton x:Name="MultiviewSync" CornerRadius="16" Padding="12,4" Margin="4,0,0,0" AutomationProperties.Name="Sync streams"
+                                          ToolTipService.ToolTip="Line every stream up to the same moment, for streamers playing together">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE895;" FontSize="13" />
+                                    <TextBlock Text="Sync" />
+                                </StackPanel>
+                            </ToggleButton>
+                            <Button x:Name="MultiviewResetSizes" Style="{StaticResource IconButton}" Content="&#xE7A7;" AutomationProperties.Name="Reset sizes"
+                                    ToolTipService.ToolTip="Reset video and chat sizes" />
+                            <Button x:Name="MultiviewFullscreenAll" Style="{StaticResource IconButton}" Content="&#xE740;" AutomationProperties.Name="Fullscreen all streams"
+                                    ToolTipService.ToolTip="Fullscreen all streams" />
                             <Button x:Name="MultiviewRestoreGrid" Content="Back to grid" Visibility="Collapsed" AutomationProperties.Name="Back to grid" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
@@ -485,32 +544,102 @@
                         <local:GripSplitter x:Name="MultiviewDivider" Background="Transparent" />
                         <Grid x:Name="MultiviewChatDock" RowSpacing="6" ColumnSpacing="6" />
                     </Grid>
-                    <Grid Grid.Row="2" Padding="10,4,10,10" ColumnSpacing="10" Background="{StaticResource GlintPanelBrush}">
+                    <Grid x:Name="MultiviewComposerBar" Grid.Row="2" Padding="10,8,10,10" ColumnSpacing="10" Background="{StaticResource GlintPanelBrush}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ComboBox x:Name="MultiviewRecipient" Header="Send to" HorizontalAlignment="Stretch" AutomationProperties.Name="Message recipient" />
+                        <!-- who you're typing to, shown when there's no chat pane to put the box under -->
+                        <Button x:Name="MultiviewRecipientButton" VerticalAlignment="Bottom" Padding="6,4,10,4" CornerRadius="16" MinHeight="32"
+                                AutomationProperties.Name="Choose which chat to write in" ToolTipService.ToolTip="Choose which chat to write in">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Border Width="22" Height="22" CornerRadius="11" Background="#26FFFFFF">
+                                    <Border CornerRadius="11">
+                                        <Border.Background>
+                                            <ImageBrush x:Name="MultiviewRecipientAvatar" Stretch="UniformToFill" />
+                                        </Border.Background>
+                                    </Border>
+                                </Border>
+                                <TextBlock x:Name="MultiviewRecipientName" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                <FontIcon Glyph="&#xE70D;" FontSize="10" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Grid x:Name="MultiviewComposerInput" Grid.Column="1" VerticalAlignment="Bottom" />
                     </Grid>
                 </Grid>
             </UserControl>
 
-            <Grid x:Name="VodPanel" Grid.Column="1" Grid.ColumnSpan="3" Visibility="Collapsed" Background="#FF0F0F12" Padding="22,16,10,0" RowSpacing="12">
+            <Grid x:Name="VodPanel" Grid.Column="1" Grid.ColumnSpan="3" Visibility="Collapsed" Background="#FF0F0F12">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <Grid>
-                    <TextBlock x:Name="VodPanelTitle" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-                    <Button x:Name="VodPanelClose" AutomationProperties.Name="Close videos" Style="{StaticResource IconButton}" Content="&#xE711;"
-                            HorizontalAlignment="Right" ToolTipService.ToolTip="Back" />
+                <!-- channel header: banner faded into the page, avatar, name, followers, bio -->
+                <Grid Height="190">
+                    <Image x:Name="ChannelBanner" Stretch="UniformToFill" VerticalAlignment="Center" Opacity="0.32" />
+                    <Rectangle>
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#400F0F12" Offset="0" />
+                                <GradientStop Color="#FF0F0F12" Offset="1" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <Grid Padding="24,24,14,14" ColumnSpacing="18" VerticalAlignment="Bottom">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="80" Height="80" VerticalAlignment="Top">
+                            <Ellipse x:Name="ChannelLiveRing" Stroke="{StaticResource GlintLiveBrush}" StrokeThickness="3" Visibility="Collapsed" />
+                            <Border Width="70" Height="70" CornerRadius="35" Background="#26FFFFFF">
+                                <Border CornerRadius="35">
+                                    <Border.Background>
+                                        <ImageBrush x:Name="ChannelAvatar" Stretch="UniformToFill" />
+                                    </Border.Background>
+                                </Border>
+                            </Border>
+                        </Grid>
+                        <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock x:Name="VodPanelTitle" FontSize="24" FontWeight="SemiBold" />
+                                <Border x:Name="ChannelLiveBadge" Background="{StaticResource GlintLiveBrush}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <TextBlock Text="LIVE" FontSize="11" FontWeight="Bold" Foreground="White" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock x:Name="ChannelMeta" FontSize="13" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ChannelBio" FontSize="13" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" MaxWidth="760"
+                                       HorizontalAlignment="Left" Margin="0,4,0,0" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
+                            <Button x:Name="ChannelWatchButton" Style="{StaticResource AccentButtonStyle}" Content="Watch live" Visibility="Collapsed" Margin="0,0,4,0" />
+                            <ToggleButton x:Name="ChannelAlertButton" Margin="0,0,4,0" AutomationProperties.Name="Go-live alerts for this channel"
+                                          ToolTipService.ToolTip="Get a notification when this channel goes live">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xEA8F;" FontSize="14" />
+                                    <TextBlock Text="Alerts" />
+                                </StackPanel>
+                            </ToggleButton>
+                            <Button x:Name="ChannelTwitchButton" AutomationProperties.Name="Open on twitch.tv" Style="{StaticResource IconButton}" Content="&#xE8A7;"
+                                    ToolTipService.ToolTip="Open on twitch.tv" />
+                            <Button x:Name="VodPanelClose" AutomationProperties.Name="Close channel page" Style="{StaticResource IconButton}" Content="&#xE711;"
+                                    ToolTipService.ToolTip="Back (Esc)" />
+                        </StackPanel>
+                    </Grid>
                 </Grid>
-                <GridView x:Name="VodGrid" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True"
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Padding="24,4,14,14">
+                    <ToggleButton x:Name="VodModeArchive" Content="Past broadcasts" CornerRadius="16" Padding="14,4" />
+                    <ToggleButton x:Name="VodModeHighlights" Content="Highlights" CornerRadius="16" Padding="14,4" />
+                    <ToggleButton x:Name="VodModeClips" Content="Clips" CornerRadius="16" Padding="14,4" />
+                    <ComboBox x:Name="ClipPeriod" Visibility="Collapsed" Margin="8,0,0,0" MinWidth="140" AutomationProperties.Name="Clips from" />
+                </StackPanel>
+                <GridView x:Name="VodGrid" Grid.Row="2" SelectionMode="None" IsItemClickEnabled="True" Padding="24,0,8,0"
                           ItemTemplate="{StaticResource VodTemplate}" />
-                <ProgressRing x:Name="VodSpinner" Grid.Row="1" Width="36" Height="36" IsActive="False" />
-                <TextBlock x:Name="VodEmpty" Grid.Row="1" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Foreground="{StaticResource GlintSubtleTextBrush}" Text="No past broadcasts. Some streamers keep them private." />
+                <ProgressRing x:Name="VodSpinner" Grid.Row="2" Width="36" Height="36" IsActive="False" />
+                <TextBlock x:Name="VodEmpty" Grid.Row="2" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{StaticResource GlintSubtleTextBrush}" />
             </Grid>
 
             <Grid x:Name="EmptyState" Grid.Column="1" Grid.ColumnSpan="3" Background="#80101014" CornerRadius="8,0,0,0">

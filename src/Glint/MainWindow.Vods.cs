@@ -2,6 +2,7 @@ using System.Globalization;
 using Glint.Chat;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -15,7 +16,8 @@ public sealed class VodItem
         Video = v;
         Title = v.Title;
         Length = FormatTime(v.LengthSeconds);
-        Meta = string.Join("  ·  ", new[] { Ago(v.CreatedAt), $"{ChannelEntry.FormatCount(v.Views)} views", v.Game }.Where(s => s != null));
+        Meta = string.Join("  ·  ", new[] { Ago(v.CreatedAt), $"{ChannelEntry.FormatCount(v.Views)} views",
+            v.ClipBy != null ? $"Clipped by {v.ClipBy}" : v.Game }.Where(s => s != null));
         if (v.Thumbnail != null) Thumbnail = new BitmapImage(new Uri(v.Thumbnail)) { DecodePixelWidth = 256 };
     }
 
@@ -27,7 +29,7 @@ public sealed class VodItem
 
     public override string ToString() => Title; // what screen readers announce
 
-    static string Ago(DateTimeOffset when)
+    internal static string Ago(DateTimeOffset when)
     {
         var days = (DateTime.Now.Date - when.LocalDateTime.Date).Days;
         return days switch
@@ -49,13 +51,32 @@ public sealed class VodItem
 public sealed partial class MainWindow
 {
     static readonly double[] Speeds = { 0.5, 0.75, 1, 1.25, 1.5, 2 };
+    static readonly (string Label, string Value)[] ClipPeriods =
+        { ("Last 24 hours", "LAST_DAY"), ("Last 7 days", "LAST_WEEK"), ("Last 30 days", "LAST_MONTH"), ("All time", "ALL_TIME") };
     bool _vodPanelOpen, _seekDragging, _updatingSeek;
+    string _vodMode = "ARCHIVE";
+    int _vodVersion;
+    string? _bannerUrl;
 
     void WireVodControls()
     {
-        VideosButton.Click += async (_, _) => await OpenVodPanelAsync();
-        OfflineVodsButton.Click += async (_, _) => await OpenVodPanelAsync();
+        foreach (var button in new ButtonBase[] { VideosButton, OfflineVodsButton, InfoNameButton, InfoAvatarButton })
+            button.Click += (_, _) => _ = OpenVodPanelAsync();
         VodPanelClose.Click += (_, _) => CloseVodPanel();
+        VodModeArchive.Click += (_, _) => _ = ShowVideosAsync("ARCHIVE");
+        VodModeHighlights.Click += (_, _) => _ = ShowVideosAsync("HIGHLIGHT");
+        VodModeClips.Click += (_, _) => _ = ShowVideosAsync("CLIPS");
+        ClipPeriod.ItemsSource = ClipPeriods.Select(p => p.Label).ToList();
+        ClipPeriod.SelectedIndex = 1;
+        ClipPeriod.SelectionChanged += (_, _) => { if (_vodMode == "CLIPS") _ = ShowVideosAsync("CLIPS"); };
+        ChannelAlertButton.Click += (_, _) => { if (_active != null) SetLiveAlert(_active.Login, ChannelAlertButton.IsChecked == true); };
+        ChannelTwitchButton.Click += (_, _) => { if (_active != null) Launch($"https://www.twitch.tv/{_active.Login}"); };
+        ChannelWatchButton.Click += (_, _) =>
+        {
+            if (_active is not { } tab) return;
+            CloseVodPanel();
+            if (tab.Vod != null) ExitVod(tab);
+        };
         VodGrid.ItemClick += (_, e) =>
         {
             if (e.ClickedItem is not VodItem item || _active == null) return;
@@ -143,27 +164,94 @@ public sealed partial class MainWindow
         ShowPlayerOverlay();
     }
 
+    // The channel page: who they are, then their past broadcasts, highlights and clips.
     async Task OpenVodPanelAsync()
     {
         if (_active is not { } tab) return;
+        CloseBrowse();
         _vodPanelOpen = true;
         VodPanel.Visibility = Visibility.Visible;
-        VodPanelTitle.Text = $"{tab.Entry.DisplayName}'s past broadcasts";
+        FillChannelHeader(tab);
         UpdateVideoBounds();
+        _ = LoadChannelAboutAsync(tab);
+        await ShowVideosAsync(_vodMode);
+    }
 
-        if (tab.Videos == null || DateTime.UtcNow - tab.VideosFetched > TimeSpan.FromMinutes(5))
+    void FillChannelHeader(ChannelTab tab)
+    {
+        var entry = tab.Entry;
+        var about = tab.About?.About;
+        VodPanelTitle.Text = entry.DisplayName;
+        ChannelAlertButton.IsChecked = HasLiveAlert(entry.Login);
+        ChannelAvatar.ImageSource = entry.Avatar;
+        var live = entry.IsLive ? Visibility.Visible : Visibility.Collapsed;
+        ChannelLiveRing.Visibility = ChannelLiveBadge.Visibility = ChannelWatchButton.Visibility = live;
+
+        var parts = new List<string>();
+        if (about is { Followers: > 0 }) parts.Add($"{ChannelEntry.FormatCount(about.Followers)} followers");
+        if (about?.Partner == true) parts.Add("Partner");
+        if (entry.Stream is { } stream)
+            parts.Add($"Live now{(stream.Game != null ? $" with {stream.Game}" : "")}, {ChannelEntry.FormatCount(stream.Viewers)} watching");
+        else if (about?.LastLive is { } last)
+        {
+            var ago = VodItem.Ago(last);
+            parts.Add("Last live " + (ago is "Today" or "Yesterday" ? ago.ToLowerInvariant() : ago.EndsWith("ago") ? ago : "on " + ago)
+                + (about.LastGame != null ? $" with {about.LastGame}" : ""));
+        }
+        ChannelMeta.Text = string.Join("  ·  ", parts);
+        ChannelBio.Text = about?.Description?.Trim() ?? "";
+        ChannelBio.Visibility = ChannelBio.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_bannerUrl != about?.Banner)
+        {
+            _bannerUrl = about?.Banner;
+            ChannelBanner.Source = _bannerUrl != null ? new BitmapImage(new Uri(_bannerUrl)) : null;
+        }
+    }
+
+    async Task LoadChannelAboutAsync(ChannelTab tab)
+    {
+        if (tab.About is { } cached && DateTime.UtcNow - cached.At < TimeSpan.FromMinutes(10)) return;
+        ChannelAbout? about = null;
+        try { about = await TwitchGql.GetChannelAboutAsync(tab.Login); }
+        catch (Exception ex) { Log.Error("Channel about", ex); }
+        tab.About = (DateTime.UtcNow, about);
+        if (_vodPanelOpen && _active == tab) FillChannelHeader(tab);
+    }
+
+    // mode: ARCHIVE, HIGHLIGHT or CLIPS (for the period picked beside it).
+    async Task ShowVideosAsync(string mode)
+    {
+        if (_active is not { } tab) return;
+        _vodMode = mode;
+        VodModeArchive.IsChecked = mode == "ARCHIVE";
+        VodModeHighlights.IsChecked = mode == "HIGHLIGHT";
+        VodModeClips.IsChecked = mode == "CLIPS";
+        ClipPeriod.Visibility = mode == "CLIPS" ? Visibility.Visible : Visibility.Collapsed;
+        var period = ClipPeriods[Math.Max(0, ClipPeriod.SelectedIndex)].Value;
+        var key = mode == "CLIPS" ? "CLIPS:" + period : mode;
+        int version = ++_vodVersion;
+
+        if (!tab.VideoCache.TryGetValue(key, out var cached) || DateTime.UtcNow - cached.At > TimeSpan.FromMinutes(5))
         {
             VodGrid.ItemsSource = null;
             VodEmpty.Visibility = Visibility.Collapsed;
             VodSpinner.IsActive = true;
-            try { tab.Videos = await TwitchGql.GetVideosAsync(tab.Login); }
-            catch (Exception ex) { Log.Error("Videos", ex); tab.Videos = new(); }
-            tab.VideosFetched = DateTime.UtcNow;
-            VodSpinner.IsActive = false;
+            List<VideoInfo> items;
+            try { items = mode == "CLIPS" ? await TwitchGql.GetClipsAsync(tab.Login, period) : await TwitchGql.GetVideosAsync(tab.Login, mode); }
+            catch (Exception ex) { Log.Error("Videos", ex); items = new(); }
+            cached = (DateTime.UtcNow, items);
+            tab.VideoCache[key] = cached;
         }
-        if (_active != tab || !_vodPanelOpen) return;
-        VodGrid.ItemsSource = tab.Videos.Select(v => new VodItem(v)).ToList();
-        VodEmpty.Visibility = tab.Videos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (version != _vodVersion || _active != tab || !_vodPanelOpen) return;
+        VodSpinner.IsActive = false;
+        VodGrid.ItemsSource = cached.Items.Select(v => new VodItem(v)).ToList();
+        VodEmpty.Text = mode switch
+        {
+            "HIGHLIGHT" => "No highlights yet.",
+            "CLIPS" => "No clips from this period.",
+            _ => "No past broadcasts. Some streamers keep them private.",
+        };
+        VodEmpty.Visibility = cached.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     void CloseVodPanel()
@@ -189,7 +277,9 @@ public sealed partial class MainWindow
         if (tab.Vod?.Id != video.Id || tab.Replay == null)
         {
             tab.Replay = new ChatChannel(tab.Chat);
-            tab.ReplayEngine = new VodReplay(video.Id, tab.Replay);
+            // Clips have no chat replay of their own.
+            tab.ReplayEngine = video.ClipSlug == null ? new VodReplay(video.Id, tab.Replay) : null;
+            if (video.ClipSlug != null) tab.Replay.AddSystem("Chat replay isn't available for clips.");
         }
         tab.Vod = video;
         tab.VodPosition = start;
@@ -204,7 +294,7 @@ public sealed partial class MainWindow
         OnPlayerState(tab, Player.PlayerState.Loading);
 
         List<StreamVariant> variants;
-        try { variants = await TwitchGql.GetVodVariantsAsync(video.Id); }
+        try { variants = video.ClipSlug is { } slug ? await TwitchGql.GetClipVariantsAsync(slug) : await TwitchGql.GetVodVariantsAsync(video.Id); }
         catch (Exception ex) { Log.Error("VOD variants", ex); variants = new(); }
         if (_closing || !_tabs.Contains(tab) || version != playback.Version) return;
         playback.Resolving = false;
@@ -215,7 +305,8 @@ public sealed partial class MainWindow
         if (variants.Count == 0)
         {
             playback.Player?.Stop();
-            playback.ErrorMessage = TwitchSession.IsConnected
+            playback.ErrorMessage = video.ClipSlug != null ? "Couldn't load this clip."
+                : TwitchSession.IsConnected
                 ? "Couldn't load this video. It may be subscriber-only."
                 : "Couldn't load this video. Subscriber-only VODs need your twitch.tv session (Settings).";
             OnPlayerState(tab, Player.PlayerState.Error);
@@ -290,6 +381,7 @@ public sealed partial class MainWindow
         GoLiveButton.Visibility = vod ? Visibility.Visible : Visibility.Collapsed;
         GoLiveButton.Content = tab?.Entry.IsLive == true ? "Back to live" : "Close video";
         VodBadge.Visibility = vod ? Visibility.Visible : Visibility.Collapsed;
+        VodBadgeText.Text = tab?.Vod?.ClipSlug != null ? "CLIP" : "VOD";
         UpdateOverlayState();
         if (vod) UpdateVodTime(tab!.VodPosition);
         UpdateVideoBounds();

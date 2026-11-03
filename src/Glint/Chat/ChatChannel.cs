@@ -18,6 +18,10 @@ public sealed class ChatChannel
     public string? SelfLogin { get; set; }
 
     readonly ConcurrentQueue<object> _incoming = new();
+    // Live chat waits here for Delay, so it lines up with a video that runs behind real time.
+    readonly ConcurrentQueue<(object Item, long Received)> _held = new();
+
+    public TimeSpan Delay { get; set; }
     readonly object _historyLock = new();
     readonly List<UserHistory> _userHistories = new();
     readonly List<IrcMessage> _beforeReady = new();
@@ -98,6 +102,7 @@ public sealed class ChatChannel
             var history = new UserHistory(this, user);
             foreach (var message in Messages) history.Forward(message);
             foreach (var item in _incoming) history.Forward(item);
+            foreach (var (item, _) in _held) history.Forward(item);
             _userHistories.Add(history);
             return history;
         }
@@ -187,31 +192,32 @@ public sealed class ChatChannel
 
     void Process(IrcMessage m, bool historical = false)
     {
+        bool live = !historical;
         switch (m.Command)
         {
             case "PRIVMSG":
             case "USERNOTICE":
                 if (MessageBuilder.FromIrc(m, this) is { } msg)
                 {
-                    Enqueue(msg);
+                    Enqueue(msg, live);
                     if (!historical && !IsReplay && msg.Highlighted) Mentioned?.Invoke(this, msg);
                 }
                 break;
             case "CLEARMSG":
-                Enqueue(new DeleteOp(m.Tag("target-msg-id"), null));
+                Enqueue(new DeleteOp(m.Tag("target-msg-id"), null), live);
                 break;
             case "CLEARCHAT":
                 var target = m.Trailing;
                 if (m.Params.Count < 2 || string.IsNullOrEmpty(target))
                 {
-                    if (!historical) Enqueue(ChatMessage.System("Chat was cleared by a moderator"));
+                    if (!historical) Enqueue(ChatMessage.System("Chat was cleared by a moderator"), live);
                     break;
                 }
-                Enqueue(new DeleteOp(null, m.Tag("target-user-id")));
+                Enqueue(new DeleteOp(null, m.Tag("target-user-id")), live);
                 var dur = m.Tag("ban-duration");
                 Enqueue(ChatMessage.System(dur.Length > 0
                     ? $"{target} has been timed out for {FormatDuration(int.Parse(dur))}"
-                    : $"{target} has been permanently banned"));
+                    : $"{target} has been permanently banned"), live);
                 break;
             case "USERSTATE":
                 SelfColor = MessageBuilder.ParseColor(m.Tag("color"), SelfLogin ?? "");
@@ -297,23 +303,29 @@ public sealed class ChatChannel
         lock (_chatters) return _chatters.ToList();
     }
 
-    void Enqueue(object item)
+    void Enqueue(object item, bool live = false)
     {
         lock (_historyLock)
         {
-            _incoming.Enqueue(item);
+            if (live) _held.Enqueue((item, Environment.TickCount64));
+            else _incoming.Enqueue(item);
             foreach (var history in _userHistories) history.Forward(item);
         }
         Updated?.Invoke(this);
     }
 
-    public bool HasPending => !_incoming.IsEmpty;
+    public bool HasPending => !_incoming.IsEmpty || !_held.IsEmpty;
+
+    // Something Drain would hand over right now (held chat only once its delay is up).
+    public bool HasReady => !_incoming.IsEmpty ||
+        _held.TryPeek(out var next) && next.Received <= Environment.TickCount64 - (long)Delay.TotalMilliseconds;
 
     // UI thread: applies queued messages / deletions. Returns newly added messages.
     public List<ChatMessage> Drain()
     {
         var added = new List<ChatMessage>();
-        while (_incoming.TryDequeue(out var item))
+        long due = Environment.TickCount64 - (long)Delay.TotalMilliseconds;
+        while (NextReady(due) is { } item)
         {
             switch (item)
             {
@@ -339,6 +351,14 @@ public sealed class ChatChannel
         }
         if (Messages.Count > MaxMessages) Messages.RemoveRange(0, Messages.Count - MaxMessages);
         return added;
+    }
+
+    // Anything not held back first, then live chat whose delay is up. Only the UI thread takes from these.
+    object? NextReady(long due)
+    {
+        if (_incoming.TryDequeue(out var item)) return item;
+        if (_held.TryPeek(out var next) && next.Received <= due && _held.TryDequeue(out next)) return next.Item;
+        return null;
     }
 
     // 7TV EventAPI update for this channel's emote set.
