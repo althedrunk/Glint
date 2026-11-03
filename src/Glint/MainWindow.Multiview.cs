@@ -393,8 +393,9 @@ public sealed partial class MainWindow
             _multiviewResolvedDock = S.MultiviewDock == "Auto"
                 ? MultiviewContent.ActualWidth >= 1200 && (slots.Count > 2 || MultiviewContent.ActualWidth > MultiviewContent.ActualHeight * 2) ? "Right" : "Below"
                 : S.MultiviewDock;
-            // One video fullscreen: just that video, no toolbar, headers or chats.
+            // One video fullscreen: just that video, no toolbar or headers, and its own chat on the right if chat is on.
             bool solo = SoloFullscreen;
+            if (solo) _multiviewResolvedDock = "Right";
             MultiviewToolbar.Visibility = solo ? Visibility.Collapsed : Visibility.Visible;
             MultiviewContent.Margin = new Thickness(solo ? 0 : 6);
             foreach (var slot in _multiviewSlots)
@@ -402,7 +403,8 @@ public sealed partial class MainWindow
                 slot.Header.Visibility = solo ? Visibility.Collapsed : Visibility.Visible;
                 slot.Root.BorderThickness = new Thickness(solo ? 0 : 2);
             }
-            var chats = solo ? new List<ChannelTab>() : MultiviewChatTabs();
+            var chats = MultiviewChatTabs();
+            if (solo) chats = chats.Contains(_multiviewZoom!) ? new() { _multiviewZoom! } : new();
             if (S.MultiviewLayout == "Main stream" && _multiviewZoom == null && slots.Count > 1)
             {
                 slots = slots.OrderByDescending(s => s.Tab == _active).ToList();
@@ -527,8 +529,14 @@ public sealed partial class MainWindow
         pane.Recipient.HorizontalContentAlignment = HorizontalAlignment.Left;
         AutomationProperties.SetName(pane.Recipient, $"Write to {tab.Entry.DisplayName}");
         pane.Recipient.Click += (_, _) => { SetChatRecipient(tab); ChatInput.Focus(FocusState.Programmatic); };
-        pane.Pin = MultiviewIcon("\uE718", $"Pin chat {tab.Entry.DisplayName}");
-        pane.Pin.Click += (_, _) => ToggleMultiviewPin(tab);
+        pane.Pin = MultiviewIcon("\uE711", $"Hide chat {tab.Entry.DisplayName}");
+        pane.Pin.Click += (_, _) =>
+        {
+            ToggleMultiviewChat(tab);
+            Settings.Save();
+            ApplyMultiviewLayout();
+            UpdateOverlayState();
+        };
         Grid.SetColumn(pane.Pin, 1);
         header.Children.Add(pane.Recipient); header.Children.Add(pane.Pin);
         WireChatView(pane.View, () => tab);
@@ -556,10 +564,8 @@ public sealed partial class MainWindow
         var tab = pane.Tab;
         pane.Recipient.Content = $"{(tab.Vod != null ? "Replay" : "Chat")}: {tab.Entry.DisplayName}";
         AutomationProperties.SetName(pane.Recipient, $"Write to {tab.Entry.DisplayName}");
-        bool pinned = S.MultiviewPinnedChats.Contains(tab.Login);
-        pane.Pin.Content = pinned ? "\uE77A" : "\uE718";
-        AutomationProperties.SetName(pane.Pin, $"{(pinned ? "Unpin" : "Pin")} chat {tab.Entry.DisplayName}");
-        ToolTipService.SetToolTip(pane.Pin, $"{(pinned ? "Unpin" : "Pin")} chat {tab.Entry.DisplayName}");
+        AutomationProperties.SetName(pane.Pin, $"Hide chat {tab.Entry.DisplayName}");
+        ToolTipService.SetToolTip(pane.Pin, $"Hide chat {tab.Entry.DisplayName}");
     }
 
     void RefreshChatViews()
@@ -578,6 +584,23 @@ public sealed partial class MainWindow
         _multiviewUpdating = false;
         Settings.Save();
         ApplyMultiviewLayout();
+    }
+
+    // The chat button (and each chat's close button) shows or hides just that stream's chat.
+    void ToggleMultiviewChat(ChannelTab tab)
+    {
+        var shown = MultiviewChatTabs().Select(t => t.Login).ToList();
+        if (!shown.Remove(tab.Login)) shown.Add(tab.Login);
+        if (shown.Count > 0)
+        {
+            if (_fullscreen) S.FullscreenChat = true;
+            else S.ChatHidden = false;
+        }
+        S.MultiviewPinnedChats = shown.Skip(Math.Max(0, shown.Count - 4)).ToList();
+        S.MultiviewChats = shown.Count > 0 ? "Pinned chats" : "Hidden";
+        _multiviewUpdating = true;
+        MultiviewChatMode.SelectedItem = S.MultiviewChats;
+        _multiviewUpdating = false;
     }
 
     void ShowMultiviewPins()

@@ -527,6 +527,7 @@ public sealed partial class MainWindow
         Tabs.SelectedItem = tab.Item;
         _multiviewZoom = tab;
         _soloFullscreen = true;
+        SetChatRecipient(tab);
         if (_fullscreen) ApplyMultiviewLayout();
         else SetFullscreen(true);
     }
@@ -559,15 +560,7 @@ public sealed partial class MainWindow
 
     void ToggleChat()
     {
-        if (MultiviewActive && S.MultiviewChats == "Hidden")
-        {
-            S.MultiviewChats = "Each stream";
-            _multiviewUpdating = true;
-            MultiviewChatMode.SelectedItem = S.MultiviewChats;
-            _multiviewUpdating = false;
-            if (_fullscreen) S.FullscreenChat = true;
-            else S.ChatHidden = false;
-        }
+        if (MultiviewActive) ToggleMultiviewChat(_active!);
         else if (_fullscreen) S.FullscreenChat = !S.FullscreenChat;
         else if (S.ChatOnly)
         {
@@ -595,7 +588,7 @@ public sealed partial class MainWindow
             ? new SolidColorBrush(Windows.UI.Color.FromArgb(64, 255, 255, 255)) : null;
         ToolTipService.SetToolTip(_overlay.TheatreButton, ShortcutText(S.Theatre && !_fullscreen ? "Exit theatre" : "Theatre mode", "theatre"));
         AutomationProperties.SetName(_overlay.TheatreButton, S.Theatre && !_fullscreen ? "Exit theatre mode" : "Theatre mode");
-        _overlay.ChatButton.Opacity = (MultiviewActive ? MultiviewChatShown : ChatShown) ? 1 : 0.7;
+        _overlay.ChatButton.Opacity = (MultiviewActive ? tab != null && MultiviewChatTabs().Contains(tab) : ChatShown) ? 1 : 0.7;
         _overlay.LiveBadge.Visibility = !vod && tab?.Entry.IsLive == true ? Visibility.Visible : Visibility.Collapsed;
         _overlay.GoLiveButton.Visibility = vod && tab?.Entry.IsLive == true ? Visibility.Visible : Visibility.Collapsed;
         _overlay.SeekRow.Visibility = _overlay.SpeedButton.Visibility = _overlay.BackButton.Visibility = _overlay.ForwardButton.Visibility =

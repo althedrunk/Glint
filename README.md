@@ -22,6 +22,7 @@ Requires 64-bit Windows 10 version 2004 or later, or Windows 11. Tested on Windo
 - Sync multiview streams so streamers playing together show the same moment.
 - Drag to resize multiview videos and chats, or fullscreen a single stream.
 - Pick multiview channels from your live follows or a Twitch search, and type straight into the chat you want.
+- Show or hide each multiview stream's chat on its own from the player's chat button or the chat's close button.
 - Pop the stream out into an always-on-top mini player (Alt+P).
 - Home page with your live followed channels and recently watched ones.
 - Reopen live tabs, all tabs, or start on the home page at launch.
