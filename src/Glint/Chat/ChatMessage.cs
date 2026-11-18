@@ -7,7 +7,11 @@ namespace Glint.Chat;
 public enum MessageKind { Normal, Action, System, UserNotice }
 
 public abstract record Fragment;
-public sealed record TextFragment(string Text, string? Link = null, bool IsMention = false) : Fragment;
+public sealed record TextFragment(string Text, string? Link = null, bool IsMention = false) : Fragment
+{
+    // Punctuation stuck to the emote before it, so no space goes in between.
+    public bool Attached { get; init; }
+}
 public sealed record EmoteFragment(EmoteInfo Emote, List<EmoteInfo> Overlays) : Fragment;
 
 public sealed record BadgeRef(AnimatedImage Image, string Title);
@@ -251,18 +255,31 @@ public static class MessageBuilder
         return result;
     }
 
+    static readonly char[] TrailingPunctuation = { ',', '.', '!', '?', ';', ':', ')', '…' };
+
     static void AddWords(string segment, ChatChannel ch, List<Fragment> into, string? userId,
         IReadOnlyDictionary<string, EmoteInfo>? ownEmotes = null)
     {
+        // Twitch emotes win (that's what everyone else sees), then channel emotes, then 7TV personal ones.
+        EmoteInfo? Find(string w) => ownEmotes?.GetValueOrDefault(w) ?? ch.Emotes.Find(w) ?? SevenTvCosmetics.PersonalEmote(userId, w);
+
         foreach (var word in segment.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
-            // Twitch emotes win (that's what everyone else sees), then channel emotes, then 7TV personal ones.
-            if ((ownEmotes?.GetValueOrDefault(word) ?? ch.Emotes.Find(word) ?? SevenTvCosmetics.PersonalEmote(userId, word)) is { } emote)
+            var emote = Find(word);
+            string? tail = null;
+            // "KEK," still shows the emote, with the comma after it.
+            if (emote == null && word.TrimEnd(TrailingPunctuation) is { Length: > 0 } bare && bare.Length < word.Length && Find(bare) is { } found)
+            {
+                emote = found;
+                tail = word[bare.Length..];
+            }
+            if (emote != null)
             {
                 if (emote.ZeroWidth && into.Count > 0 && into[^1] is EmoteFragment prev)
                     prev.Overlays.Add(emote);
                 else
                     into.Add(new EmoteFragment(emote, new List<EmoteInfo>()));
+                if (tail != null) into.Add(new TextFragment(tail) { Attached = true });
                 continue;
             }
             if (word.Length > 4 && word.Contains('.') && LinkRegex.IsMatch(word))

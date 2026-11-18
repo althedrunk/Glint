@@ -171,34 +171,42 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { Log.Error("Followed", ex); }
     }
 
+    // Runs inside AppWindow.Closing, where an exception kills the process, so one failed step can't stop the rest.
+    static void ShutdownStep(Action step)
+    {
+        try { step(); }
+        catch (Exception ex) { Log.Error("Shutdown", ex); }
+    }
+
     void Shutdown()
     {
+        if (_closing) return;
         _closing = true;
-        _videoSetupCancellation.Cancel();
-        _overlayTimer.Stop();
-        _refreshTimer.Stop();
-        _viewerTimer.Stop();
-        _clockTimer.Stop();
-        _vodTimer.Stop();
-        _settingsWindow?.Close();
-        _mini?.Close();
-        NotificationSound.Stop();
-        HideEmoteSuggestions();
-        _emoteSuggestions?.Dispose();
-        _overlay.Close();
-        foreach (var window in _chatHistoryWindows.ToList()) window.Close();
-        DisposeMultiviewChats();
-        Chat.Dispose();
-        SavePlacement();
-        SaveTabs();
-        Settings.SaveNow();
+        ShutdownStep(_videoSetupCancellation.Cancel);
+        ShutdownStep(_overlayTimer.Stop);
+        ShutdownStep(_refreshTimer.Stop);
+        ShutdownStep(_viewerTimer.Stop);
+        ShutdownStep(_clockTimer.Stop);
+        ShutdownStep(_vodTimer.Stop);
+        ShutdownStep(() => _settingsWindow?.Close());
+        ShutdownStep(() => _mini?.Close());
+        ShutdownStep(NotificationSound.Stop);
+        ShutdownStep(() => HideEmoteSuggestions());
+        ShutdownStep(() => _emoteSuggestions?.Dispose());
+        ShutdownStep(_overlay.Close);
+        foreach (var window in _chatHistoryWindows.ToList()) ShutdownStep(window.Close);
+        ShutdownStep(DisposeMultiviewChats);
+        ShutdownStep(Chat.Dispose);
+        ShutdownStep(SavePlacement);
+        ShutdownStep(SaveTabs);
+        ShutdownStep(Settings.SaveNow);
         foreach (var tab in _tabs)
         {
             try { tab.Playback.Dispose(); }
             catch (Exception ex) { Log.Error("Player shutdown", ex); }
         }
-        _irc.Dispose();
-        _stv.Dispose();
+        ShutdownStep(_irc.Dispose);
+        ShutdownStep(_stv.Dispose);
     }
 
     void RestorePlacement()

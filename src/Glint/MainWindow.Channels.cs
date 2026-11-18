@@ -264,6 +264,29 @@ public sealed partial class MainWindow
         if (!_tabs.Contains(tab)) return;
         if (tab.Chat.Emotes.SevenTvSetId is { } set) _stv.Subscribe(set);
         if (tab.Entry.Id is { } roomId) _stv.SubscribeChannel(roomId);
+        if (tab.Chat.Emotes.Incomplete) _ = RetryEmotesAsync(tab);
+    }
+
+    // An emote service that was down when the tab opened gets a few more tries, so its emotes turn up once it's back.
+    async Task RetryEmotesAsync(ChannelTab tab)
+    {
+        foreach (var seconds in new[] { 30, 90, 300 })
+        {
+            await Task.Delay(TimeSpan.FromSeconds(seconds));
+            if (_closing || !_tabs.Contains(tab) || tab.Entry.Id is not { } roomId) return;
+            var emotes = tab.Chat.Emotes;
+            int before = emotes.Count;
+            bool hadSet = emotes.SevenTvSetId != null;
+            await emotes.LoadAsync(roomId);
+            if (_closing || !_tabs.Contains(tab)) return;
+            if (!hadSet && emotes.SevenTvSetId is { } set) _stv.Subscribe(set);
+            if (emotes.Count > before)
+            {
+                tab.Chat.AddSystem($"Loaded {emotes.Count - before} more emotes");
+                QueueEmoteSuggestions();
+            }
+            if (!emotes.Incomplete) return;
+        }
     }
 
     void UpdateTabHeader(ChannelTab tab)

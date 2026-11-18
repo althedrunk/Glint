@@ -36,7 +36,8 @@ public static class Net
             await using var stream = await resp.Content.ReadAsStreamAsync(ct);
             return await JsonDocument.ParseAsync(stream, cancellationToken: ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // A timeout shows up as a cancellation too; only a cancel the caller asked for should escape.
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             Log.Error($"GET {url}", ex);
             return null;

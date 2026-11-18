@@ -29,8 +29,8 @@ public sealed partial class MainWindow
     // Close() from code skips AppWindow.Closing, so shut down by hand and make sure the process ends.
     void Quit()
     {
-        if (!_closing) Shutdown();
-        Close();
+        Shutdown();
+        ShutdownStep(Close);
         Application.Current.Exit();
     }
 

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text.Json;
 
 namespace Glint;
@@ -47,15 +48,40 @@ public static class EmoteSources
         Height = 28,
     });
 
+    // Emote APIs sometimes stall on one request, so give up on it sooner and have a second go.
+    // Chat waits for emotes before showing anything, so both tries together stay under the old 20s.
+    static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(8);
+
+    // Null when the channel has no account there; throws when the service itself is failing.
+    static async Task<JsonDocument?> Fetch(string url)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            using var limit = new CancellationTokenSource(FetchTimeout);
+            try
+            {
+                using var resp = await Net.Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, limit.Token);
+                if (resp.StatusCode == HttpStatusCode.NotFound) return null;
+                resp.EnsureSuccessStatusCode();
+                await using var stream = await resp.Content.ReadAsStreamAsync(limit.Token);
+                return await JsonDocument.ParseAsync(stream, cancellationToken: limit.Token);
+            }
+            catch (Exception ex) when (attempt == 1)
+            {
+                Log.Info($"Retrying {url} ({ex.GetType().Name})");
+            }
+        }
+    }
+
     public static Task<List<EmoteInfo>> SevenTvGlobal() => _seventvGlobal ??= Retry(async () =>
     {
-        using var doc = await Net.GetJsonAsync("https://7tv.io/v3/emote-sets/global");
+        using var doc = await Fetch("https://7tv.io/v3/emote-sets/global");
         return doc == null ? null : doc.RootElement.Arr("emotes").Select(e => FromSevenTv(e, true)).OfType<EmoteInfo>().ToList();
     }, () => _seventvGlobal = null);
 
     public static async Task<(string? SetId, string? UserId, List<EmoteInfo> Emotes)> SevenTvChannel(string twitchId)
     {
-        using var doc = await Net.GetJsonAsync($"https://7tv.io/v3/users/twitch/{twitchId}");
+        using var doc = await Fetch($"https://7tv.io/v3/users/twitch/{twitchId}");
         if (doc == null) return (null, null, new());
         var set = doc.RootElement.Obj("emote_set");
         var emotes = set.Arr("emotes").Select(e => FromSevenTv(e, false)).OfType<EmoteInfo>().ToList();
@@ -98,13 +124,13 @@ public static class EmoteSources
 
     public static Task<List<EmoteInfo>> BttvGlobal() => _bttvGlobal ??= Retry(async () =>
     {
-        using var doc = await Net.GetJsonAsync("https://api.betterttv.net/3/cached/emotes/global");
+        using var doc = await Fetch("https://api.betterttv.net/3/cached/emotes/global");
         return doc == null ? null : doc.RootElement.EnumerateArray().Select(e => FromBttv(e, true)).ToList();
     }, () => _bttvGlobal = null);
 
     public static async Task<List<EmoteInfo>> BttvChannel(string twitchId)
     {
-        using var doc = await Net.GetJsonAsync($"https://api.betterttv.net/3/cached/users/twitch/{twitchId}");
+        using var doc = await Fetch($"https://api.betterttv.net/3/cached/users/twitch/{twitchId}");
         if (doc == null) return new();
         return doc.RootElement.Arr("channelEmotes").Concat(doc.RootElement.Arr("sharedEmotes"))
             .Select(e => FromBttv(e, false)).ToList();
@@ -130,7 +156,7 @@ public static class EmoteSources
 
     public static Task<List<EmoteInfo>> FfzGlobal() => _ffzGlobal ??= Retry(async () =>
     {
-        using var doc = await Net.GetJsonAsync("https://api.frankerfacez.com/v1/set/global");
+        using var doc = await Fetch("https://api.frankerfacez.com/v1/set/global");
         if (doc == null) return null;
         var defaults = doc.RootElement.Arr("default_sets").Select(s => s.ToString()).ToHashSet();
         return ParseFfzSets(doc.RootElement.Obj("sets"), true, defaults);
@@ -138,7 +164,7 @@ public static class EmoteSources
 
     public static async Task<List<EmoteInfo>> FfzChannel(string twitchId)
     {
-        using var doc = await Net.GetJsonAsync($"https://api.frankerfacez.com/v1/room/id/{twitchId}");
+        using var doc = await Fetch($"https://api.frankerfacez.com/v1/room/id/{twitchId}");
         return doc == null ? new() : ParseFfzSets(doc.RootElement.Obj("sets"), false, null);
     }
 
@@ -172,9 +198,12 @@ public static class EmoteSources
         return list;
     }
 
+    // Shared global lists: a failed load isn't kept, so the next channel tries again.
     static Task<List<EmoteInfo>> Retry(Func<Task<List<EmoteInfo>?>> load, Action reset) => Task.Run(async () =>
     {
-        var result = await load();
+        List<EmoteInfo>? result = null;
+        try { result = await load(); }
+        catch (Exception ex) { Log.Error("Global emotes", ex); }
         if (result == null) { reset(); return new List<EmoteInfo>(); }
         return result;
     });
@@ -198,16 +227,36 @@ public sealed class ChannelEmotes
         var g7 = EmoteSources.SevenTvGlobal();
         var gb = EmoteSources.BttvGlobal();
         var gf = EmoteSources.FfzGlobal();
-        await Task.WhenAll(stv, bttv, ffz, g7, gb, gf);
-
-        (SevenTvSetId, SevenTvUserId, _seventv) = stv.Result;
-        _bttv = bttv.Result;
-        _ffz = ffz.Result;
-        _seventvGlobal = g7.Result;
-        _bttvGlobal = gb.Result;
-        _ffzGlobal = gf.Result;
-        Rebuild();
+        // Each source stands alone: one that fails mustn't take the others with it.
+        bool failed = false;
+        async Task<T> OrEmpty<T>(Task<T> load, T empty, string source)
+        {
+            try { return await load; }
+            catch (Exception ex)
+            {
+                Log.Error($"Emotes ({source})", ex);
+                failed = true;
+                return empty;
+            }
+        }
+        var seventv = await OrEmpty(stv, (null, null, new()), "7TV channel");
+        var bttvList = await OrEmpty(bttv, new(), "BTTV channel");
+        var ffzList = await OrEmpty(ffz, new(), "FFZ channel");
+        // The global lists are never really empty, so empty means that load failed.
+        var g7List = await g7;
+        var gbList = await gb;
+        var gfList = await gf;
+        lock (this)
+        {
+            (SevenTvSetId, SevenTvUserId, _seventv) = seventv;
+            (_bttv, _ffz, _seventvGlobal, _bttvGlobal, _ffzGlobal) = (bttvList, ffzList, g7List, gbList, gfList);
+            Incomplete = failed || g7List.Count == 0 || gbList.Count == 0 || gfList.Count == 0;
+            Rebuild();
+        }
     }
+
+    // Some source couldn't be reached, so a later LoadAsync may find more.
+    public bool Incomplete { get; private set; }
 
     public EmoteInfo? Find(string word) => _map.TryGetValue(word, out var e) ? e : null;
 

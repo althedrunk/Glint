@@ -458,7 +458,7 @@ public sealed partial class ChatView : UserControl, IDisposable
             bool first = true;
             foreach (var f in m.Fragments)
             {
-                if (!first) sb.Append(' ');
+                if (!first && f is not TextFragment { Attached: true }) sb.Append(' ');
                 first = false;
                 switch (f)
                 {

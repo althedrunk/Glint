@@ -404,8 +404,22 @@ public sealed partial class MainWindow
         OfflineVodsButton.Visibility = vods ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    // Keeps mpv's native window glued over VideoArea. Called on every layout pass; SetBounds no-ops if nothing moved.
+    bool _videoBoundsQueued;
+
+    // Moving a native window pumps messages, and XAML fails fast if that re-enters it mid layout.
+    // So this runs just after the current pass, however many times it's asked for during it.
     void UpdateVideoBounds()
+    {
+        if (_closing || _videoBoundsQueued) return;
+        _videoBoundsQueued = _dispatcher.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.High, () =>
+        {
+            _videoBoundsQueued = false;
+            PlaceVideo();
+        });
+    }
+
+    // Keeps mpv's native window glued over VideoArea. SetBounds no-ops if nothing moved.
+    void PlaceVideo()
     {
         if (_closing) return;
         if (MultiviewActive) { UpdateMultiviewVideoBounds(); return; }
