@@ -42,7 +42,7 @@ public sealed partial class MainWindow
         _multiviewUpdating = true;
         MultiviewCount.SelectedIndex = Math.Clamp(S.MultiviewCount, 2, 4) - 2;
         MultiviewLayout.SelectedItem = S.MultiviewLayout;
-        MultiviewChatMode.SelectedItem = S.MultiviewChats;
+        MultiviewChatMode.SelectedItem = ChatModeLabel(S.MultiviewChats);
         MultiviewDock.SelectedItem = S.MultiviewDock;
         MultiviewChatWidth.Value = S.MultiviewChatWidth;
         MultiviewChatHeight.Value = S.MultiviewChatHeight;
@@ -58,6 +58,7 @@ public sealed partial class MainWindow
         OnChatPreferencesChanged();
         ApplyPlayerPreferences();
         ApplyMultiviewPreferences();
+        ApplyHomePreferences();
         RebuildShortcuts();
         if (adSkippingChanged) OnAdSkippingChanged();
         Settings.Save();

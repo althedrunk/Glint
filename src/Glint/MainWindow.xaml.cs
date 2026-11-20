@@ -76,7 +76,17 @@ public sealed partial class MainWindow : Window
         _clockTimer = Timer(TimeSpan.FromSeconds(1), UpdateInfoMeta);
         _vodTimer = Timer(TimeSpan.FromMilliseconds(250), VodTick);
 
-        AppWindow.Closing += (_, _) => Shutdown();
+        AppWindow.Closing += (_, e) =>
+        {
+            // With "keep running in the tray" on, the close button hides Glint; the tray menu quits it.
+            if (S.CloseToTray && !_quitting && !_closing)
+            {
+                e.Cancel = true;
+                HideToTray();
+                return;
+            }
+            Shutdown();
+        };
         Root.Loaded += async (_, _) =>
         {
             UpdateCaptionInset();
@@ -111,22 +121,60 @@ public sealed partial class MainWindow : Window
 
         foreach (var fav in S.Favorites) GetEntry(fav).IsFavorite = true;
         RebuildSidebar();
+        var account = ApplyAccountAsync();
 
+        // Started with Windows: nothing should start playing until you open Glint yourself, so your tabs
+        // wait until the window is first opened (and aren't saved over as empty meanwhile).
+        if (Program.StartedInBackground && S.StartupTabs != "None" && S.OpenTabs.Count > 0)
+        {
+            _deferredTabs = S.OpenTabs.ToList();
+            Activated += (_, e) =>
+            {
+                if (e.WindowActivationState != WindowActivationState.Deactivated && _deferredTabs != null && !IsIconic(_hwnd) && !_hiddenToTray)
+                    _ = RestoreTabsAsync();
+            };
+            UpdateEmptyState();
+        }
+        else await RestoreTabsAsync();
+
+        _ = RefreshLiveAsync();
+        await account;
+        _refreshTimer.Start();
+        _viewerTimer.Start();
+        _clockTimer.Start();
+        _ = PreloadEmotesAsync();
+    }
+
+    List<string>? _deferredTabs;
+
+    async Task RestoreTabsAsync()
+    {
         var activeLogin = S.ActiveTab;
-        var restore = S.StartupTabs == "None" ? new List<string>() : S.OpenTabs.ToList();
+        var restore = _deferredTabs ?? (S.StartupTabs == "None" ? new List<string>() : S.OpenTabs.ToList());
+        _deferredTabs = null;
         if (S.StartupTabs == "Live" && restore.Count > 0) restore = await LiveOnlyAsync(restore);
         foreach (var login in restore) OpenChannel(login, activate: false);
         var toSelect = _tabs.FirstOrDefault(t => t.Login == activeLogin) ?? _tabs.FirstOrDefault();
         if (toSelect != null) Tabs.SelectedItem = toSelect.Item;
         SetMultiview(S.Multiview);
         UpdateEmptyState();
-
-        _ = RefreshLiveAsync();
-        await ApplyAccountAsync();
-        _refreshTimer.Start();
-        _viewerTimer.Start();
-        _clockTimer.Start();
     }
+
+    // Fetch emotes for the channels you're likely to open, so they're on disk before you do.
+    async Task PreloadEmotesAsync()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(5)); // let the opening tabs have the network first
+        var recent = S.RecentChannels.Take(10).ToHashSet();
+        var ids = _entries.Values.Where(e => e.Id != null && (e.IsFavorite || e.IsFollowed && e.IsLive || recent.Contains(e.Login)))
+            .OrderByDescending(e => e.IsLive).Select(e => e.Id!).Take(40).ToList();
+        try { await EmoteSources.PreloadAsync(ids); }
+        catch (Exception ex) { Log.Error("Preloading emotes", ex); }
+    }
+
+    // Another launch of Glint handed over to this one.
+    internal void BringToFront() => _dispatcher.TryEnqueue(ShowFromTray);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hwnd);
 
     // The account chat, follows and emotes run as: the twitch.tv session when it's connected,
     // otherwise the API login. Null when logged out.
@@ -166,7 +214,7 @@ public sealed partial class MainWindow : Window
             foreach (var e in _entries.Values) e.IsFollowed = false;
             foreach (var login in follows) GetEntry(login).IsFollowed = true;
             RebuildSidebar();
-            await RefreshLiveAsync();
+            await RefreshLiveAsync(waitForCurrent: true);
         }
         catch (Exception ex) { Log.Error("Followed", ex); }
     }
@@ -197,6 +245,7 @@ public sealed partial class MainWindow : Window
         foreach (var window in _chatHistoryWindows.ToList()) ShutdownStep(window.Close);
         ShutdownStep(DisposeMultiviewChats);
         ShutdownStep(Chat.Dispose);
+        foreach (var tab in _tabs) ShutdownStep(() => RememberVodPosition(tab, now: true));
         ShutdownStep(SavePlacement);
         ShutdownStep(SaveTabs);
         ShutdownStep(Settings.SaveNow);
@@ -207,6 +256,7 @@ public sealed partial class MainWindow : Window
         }
         ShutdownStep(_irc.Dispose);
         ShutdownStep(_stv.Dispose);
+        ShutdownStep(RemoveTrayIcon);
     }
 
     void RestorePlacement()
@@ -346,6 +396,10 @@ public sealed partial class MainWindow : Window
         WireLiveAlerts();
         WireEngagement();
         WireClips();
+        WireMutedVod();
+        WireRaids();
+        WireMediaKeys();
+        WireTray();
         WireSession();
         _overlay.BackgroundPressed += CloseOverlayMenus;
         Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => CloseOverlayMenus()), true);
@@ -425,7 +479,7 @@ public sealed partial class MainWindow : Window
         TitleRow.Height = new GridLength(fs ? 0 : 48); // matches the Tall caption buttons
         TitleBar.Visibility = fs ? Visibility.Collapsed : Visibility.Visible;
         InfoBar.Visibility = chrome ? Visibility.Visible : Visibility.Collapsed;
-        VideoArea.CornerRadius = new CornerRadius(chrome ? 8 : 0, 0, 0, 0);
+        VideoArea.CornerRadius = new CornerRadius(0);
 
         bool collapsed = S.SidebarCollapsed;
         SidebarCol.Width = new GridLength(!sidebar ? 0 : collapsed ? 56 : Math.Clamp(S.SidebarWidth, 200, 400));
@@ -513,13 +567,16 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { Log.Error("Account avatar", ex); }
     }
 
-    void ShowSettings()
+    void ShowSettings(string? category = null)
     {
         if (_closing) return;
-        if (_settingsWindow != null) { _settingsWindow.Activate(); return; }
-        var window = _settingsWindow = new SettingsWindow(this, _hwnd);
-        window.Closed += (_, _) => _settingsWindow = null;
-        window.Activate();
+        if (_settingsWindow == null)
+        {
+            var window = _settingsWindow = new SettingsWindow(this, _hwnd);
+            window.Closed += (_, _) => _settingsWindow = null;
+        }
+        if (category != null) _settingsWindow.ShowCategory(category);
+        _settingsWindow.Activate();
     }
 
     internal Task OnLoggedInAsync() => ApplyAccountAsync();

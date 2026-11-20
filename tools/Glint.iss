@@ -50,6 +50,10 @@ Type: filesandordirs; Name: "{app}\*-*"
 Name: "{group}\Glint"; Filename: "{app}\Glint.exe"
 Name: "{autodesktop}\Glint"; Filename: "{app}\Glint.exe"; Tasks: desktopicon
 
+[Registry]
+; Glint adds this itself when "Start Glint when you sign in" is on; only clear it up on uninstall.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Glint"; Flags: uninsdeletevalue
+
 [Run]
 Filename: "{app}\Glint.exe"; Description: "Open Glint"; Flags: nowait postinstall skipifsilent
 

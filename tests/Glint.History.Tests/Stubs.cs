@@ -47,6 +47,8 @@ namespace Glint.Chat
         public bool Highlighted { get; init; }
         public string? SystemText { get; init; }
         public List<Fragment> Fragments { get; init; } = new();
+        public int EmoteVersion { get; set; }
+        public object? Layout { get; set; }
         public ChatMessage CopyForView() => (ChatMessage)MemberwiseClone();
         public static ChatMessage System(string text) => new() { Kind = MessageKind.System, SystemText = text };
     }
@@ -61,6 +63,8 @@ namespace Glint.Chat
     public sealed class ChannelEmotes
     {
         public int Count => 0;
+        public int Version => 0;
+        public Task LoadCachedAsync(string twitchId) => Task.CompletedTask;
         public Task LoadAsync(string roomId) => Task.CompletedTask;
         public EmoteInfo? SevenTvRemove(string id) => null;
         public void SevenTvAdd(EmoteInfo info) { }
@@ -69,7 +73,8 @@ namespace Glint.Chat
     {
         public static ChatMessage? FromIrc(IrcMessage message, ChatChannel channel) => null;
         public static Color ParseColor(string color, string login) => new();
-        public static ChatMessage Local(string text, ChatChannel channel, string login, string name, Color color, List<BadgeRef> badges, string? uid, ChatMessage? reply) => new();
+        public static ChatMessage Local(string text, ChatChannel channel, string login, string name, Color color, List<BadgeRef> badges, string? uid, ChatMessage? reply, IReadOnlyDictionary<string, EmoteInfo>? ownEmotes = null) => new();
+        public static bool AddLateEmotes(ChatMessage message, ChatChannel channel) => false;
         public static ChatMessage FromComment(VodComment comment, ChatChannel channel) => new();
     }
 }

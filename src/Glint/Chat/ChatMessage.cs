@@ -50,6 +50,8 @@ public sealed class ChatMessage
 
     // Render cache, owned by the UI thread.
     internal object? Layout;
+    // Which load of the channel's emotes this was matched against (see ChatChannel.Drain).
+    internal int EmoteVersion;
 
     public string PlainText => string.Join(" ", Fragments.Select(f => f switch
     {
@@ -256,6 +258,27 @@ public static class MessageBuilder
     }
 
     static readonly char[] TrailingPunctuation = { ',', '.', '!', '?', ';', ':', ')', '…' };
+
+    // Emotes that loaded after the message arrived: turn matching plain words into them. True if anything changed.
+    internal static bool AddLateEmotes(ChatMessage m, ChatChannel ch)
+    {
+        var result = new List<Fragment>();
+        bool changed = false;
+        foreach (var f in m.Fragments)
+        {
+            if (f is TextFragment { Link: null, IsMention: false, Attached: false } t)
+            {
+                int before = result.Count;
+                AddWords(t.Text, ch, result, m.UserId);
+                changed |= result.Skip(before).Any(x => x is EmoteFragment);
+            }
+            else result.Add(f);
+        }
+        if (!changed) return false;
+        m.Fragments.Clear();
+        m.Fragments.AddRange(result);
+        return true;
+    }
 
     static void AddWords(string segment, ChatChannel ch, List<Fragment> into, string? userId,
         IReadOnlyDictionary<string, EmoteInfo>? ownEmotes = null)

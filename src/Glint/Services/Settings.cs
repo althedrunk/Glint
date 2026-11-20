@@ -12,7 +12,15 @@ public sealed class AppSettings
     // What to reopen at launch: "Live" (tabs whose channel is live), "All", or "None" (the home page).
     public string StartupTabs { get; set; } = "Live";
     public List<string> RecentChannels { get; set; } = new();
+    // Home page: section order (Continue, Live, Recent), the ones switched off, and how many rows of live channels.
+    public List<string> HomeSections { get; set; } = new() { "Continue", "Live", "Recent" };
+    public List<string> HomeHiddenSections { get; set; } = new();
+    public int HomeLiveRows { get; set; } = 2; // 0 shows them all
+    // Where you got to in each VOD, most recent first, so reopening one carries on from there.
+    public List<VodProgress> VodProgress { get; set; } = new();
     public bool CheckForUpdates { get; set; } = true;
+    // Closing the window hides Glint to the notification area instead of quitting.
+    public bool CloseToTray { get; set; }
     public bool SyncChatToVideo { get; set; } = true;
     public bool MultiviewSync { get; set; }
 
@@ -34,6 +42,9 @@ public sealed class AppSettings
     public bool UseLastVolumeForNewTabs { get; set; } = true;
     public double SeekSeconds { get; set; } = 10;
     public double LongSeekSeconds { get; set; } = 60;
+    public bool SkipMutedVod { get; set; }
+    // When the channel you're watching raids someone, go with it after a countdown (otherwise just offer).
+    public bool FollowRaids { get; set; } = true;
     public double ControlsHideSeconds { get; set; } = 2.5;
 
     public string AccentColor { get; set; } = "Purple";
@@ -73,7 +84,7 @@ public sealed class AppSettings
     public string ChatFontFamily { get; set; } = "Segoe UI Variable Text";
     public bool PauseChatOnHover { get; set; } = true;
     public bool EmoteSuggestions { get; set; } = true;
-    public double ChatMessageSpacing { get; set; } = 3;
+    public double ChatMessageSpacing { get; set; } = 2;
     public double ChatLineSpacing { get; set; } = 1;
     public double EmoteScale { get; set; } = 1;
     public string EmoteAnimation { get; set; } = "Always";
@@ -156,6 +167,20 @@ public sealed class AppSettings
         }
         catch { return null; }
     }
+}
+
+public sealed class VodProgress
+{
+    public string Id { get; set; } = "";
+    public double Seconds { get; set; }
+    public double Length { get; set; }
+    // Enough to show it under "Continue watching" before Twitch has answered.
+    public string Login { get; set; } = "";
+    public string Channel { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string? Thumbnail { get; set; }
+    // Taken off "Continue watching" by hand. The position is kept, and watching more brings it back.
+    public bool Hidden { get; set; }
 }
 
 public static class Settings

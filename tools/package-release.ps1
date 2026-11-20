@@ -41,6 +41,9 @@ Copy-Item -LiteralPath (Join-Path $publish 'Glint.exe') -Destination $package
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $docs
 Copy-Item -LiteralPath (Join-Path $repo 'THIRD-PARTY-NOTICES.md') -Destination $docs
 Copy-Item -LiteralPath (Join-Path $repo 'docs\release-readme.txt') -Destination (Join-Path $docs 'START-HERE.txt')
+$fontNotices = Join-Path $docs 'licenses\inter-tight'
+New-Item -ItemType Directory -Path $fontNotices -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $repo 'src\Glint\Assets\Fonts\InterTight-OFL.txt') -Destination $fontNotices
 $innoNotices = Join-Path $docs 'licenses\inno-setup'
 New-Item -ItemType Directory -Path $innoNotices -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $InnoCompiler) 'license.txt') -Destination $innoNotices

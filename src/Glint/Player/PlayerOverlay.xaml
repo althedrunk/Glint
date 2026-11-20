@@ -16,14 +16,14 @@
                 <Setter Property="Padding" Value="8,0" />
                 <Setter Property="CornerRadius" Value="6" />
                 <Setter Property="AllowFocusOnInteraction" Value="False" />
-                <Setter Property="FontFamily" Value="{ThemeResource SymbolThemeFontFamily}" />
+                <Setter Property="FontFamily" Value="{StaticResource GlintIconFont}" />
                 <Setter Property="FontSize" Value="18" />
             </Style>
             <Style TargetType="Slider">
                 <Setter Property="AllowFocusOnInteraction" Value="False" />
             </Style>
             <Style x:Key="OverlayTextButton" TargetType="Button" BasedOn="{StaticResource OverlayButton}">
-                <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
+                <Setter Property="FontFamily" Value="{StaticResource GlintFont}" />
                 <Setter Property="FontSize" Value="13" />
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
@@ -50,6 +50,17 @@
                             AutomationProperties.Name="Copy clip link" />
                 </StackPanel>
             </Border>
+            <Border x:Name="RaidToast" x:FieldModifier="internal" Visibility="Collapsed" HorizontalAlignment="Right" Margin="0,0,4,6"
+                    Background="#F21E1E24" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="8" Padding="12,6,6,6">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE945;" FontSize="14" Foreground="#FFFF6B6B" VerticalAlignment="Center" />
+                    <TextBlock x:Name="RaidText" x:FieldModifier="internal" FontSize="13" Foreground="White" VerticalAlignment="Center" />
+                    <Button x:Name="RaidFollowButton" x:FieldModifier="internal" Content="Follow now" Padding="10,3" AllowFocusOnInteraction="False"
+                            Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Follow raid" />
+                    <Button x:Name="RaidStayButton" x:FieldModifier="internal" Content="Stay" Padding="10,3" AllowFocusOnInteraction="False"
+                            AutomationProperties.Name="Stay on this channel" />
+                </StackPanel>
+            </Border>
             <StackPanel x:Name="TitlePanel" x:FieldModifier="internal" Visibility="Collapsed" Padding="6,0,0,4">
                 <TextBlock x:Name="TitleText" x:FieldModifier="internal" FontSize="16" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" />
                 <TextBlock x:Name="SubtitleText" x:FieldModifier="internal" FontSize="12.5" Foreground="#CCFFFFFF" TextTrimming="CharacterEllipsis" />
@@ -58,11 +69,13 @@
             <Grid x:Name="SeekRow" x:FieldModifier="internal" Visibility="Collapsed">
                 <Slider x:Name="Seek" x:FieldModifier="internal" Minimum="0" Maximum="1" IsThumbToolTipEnabled="False"
                         Margin="4,0,4,-6" AutomationProperties.Name="Seek" />
+                <!-- muted stretches, drawn over the track -->
+                <Canvas x:Name="MutedMarks" x:FieldModifier="internal" IsHitTestVisible="False" Margin="4,14,4,0" />
                 <!-- time under the pointer while hovering the seek bar -->
                 <Canvas IsHitTestVisible="False">
                     <Border x:Name="SeekPreview" x:FieldModifier="internal" Background="#E6202026" CornerRadius="4" Padding="6,2"
                             Canvas.Top="-24" Visibility="Collapsed">
-                        <TextBlock x:Name="SeekPreviewText" x:FieldModifier="internal" FontSize="12" Foreground="White" />
+                        <TextBlock x:Name="SeekPreviewText" FontFamily="{StaticResource GlintMonoFont}" x:FieldModifier="internal" FontSize="12" Foreground="White" />
                     </Border>
                 </Canvas>
             </Grid>
@@ -83,11 +96,11 @@
                             AutomationProperties.Name="Play or pause" ToolTipService.ToolTip="Pause (Space)" />
                     <Button x:Name="BackButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Visibility="Collapsed"
                             AutomationProperties.Name="Seek back">
-                        <TextBlock x:Name="BackSeconds" x:FieldModifier="internal" Text="-10" FontFamily="Segoe UI Variable Text" FontSize="13" FontWeight="SemiBold" />
+                        <TextBlock x:Name="BackSeconds" x:FieldModifier="internal" Text="-10" FontFamily="{StaticResource GlintFont}" FontSize="13" FontWeight="SemiBold" />
                     </Button>
                     <Button x:Name="ForwardButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Visibility="Collapsed"
                             AutomationProperties.Name="Seek forward">
-                        <TextBlock x:Name="ForwardSeconds" x:FieldModifier="internal" Text="+10" FontFamily="Segoe UI Variable Text" FontSize="13" FontWeight="SemiBold" />
+                        <TextBlock x:Name="ForwardSeconds" x:FieldModifier="internal" Text="+10" FontFamily="{StaticResource GlintFont}" FontSize="13" FontWeight="SemiBold" />
                     </Button>
                     <Button x:Name="MuteButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE767;"
                             AutomationProperties.Name="Mute" ToolTipService.ToolTip="Mute (M)" />
@@ -106,14 +119,34 @@
                     </Button>
                 </StackPanel>
 
-                <TextBlock x:Name="StatusText" x:FieldModifier="internal" Grid.Column="1" Margin="8,0"
-                           VerticalAlignment="Center" FontSize="13" Foreground="#E6FFFFFF" TextTrimming="CharacterEllipsis" />
+                <!-- a grid, not a stack, so a long status shortens with "…" instead of being cut off -->
+                <Grid Grid.Column="1" ColumnSpacing="10" Margin="8,0" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="StatusText" FontFamily="{StaticResource GlintMonoFont}" x:FieldModifier="internal"
+                               VerticalAlignment="Center" FontSize="13" Foreground="#E6FFFFFF" TextTrimming="CharacterEllipsis" />
+                    <!-- in a part Twitch muted for copyrighted audio -->
+                    <Border x:Name="MutedNotice" x:FieldModifier="internal" Grid.Column="1" Visibility="Collapsed" VerticalAlignment="Center"
+                            Background="#40EB4040" CornerRadius="4" Padding="7,1,2,1" ToolTipService.ToolTip="Twitch muted this part for copyrighted audio">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE74F;" FontSize="12" Foreground="#FFFF6B6B" VerticalAlignment="Center" />
+                            <TextBlock x:Name="MutedText" FontFamily="{StaticResource GlintMonoFont}" x:FieldModifier="internal" FontSize="12.5" Foreground="White" VerticalAlignment="Center" />
+                            <Button x:Name="MutedSkipButton" x:FieldModifier="internal" Content="Skip" FontSize="12" Padding="8,1" MinHeight="0"
+                                    Background="Transparent" BorderThickness="0" AllowFocusOnInteraction="False"
+                                    AutomationProperties.Name="Skip muted part" ToolTipService.ToolTip="Jump to where the sound comes back" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
 
                 <StackPanel x:Name="RightControls" Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <Button x:Name="ClipButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE8C6;"
                             AutomationProperties.Name="Clip" ToolTipService.ToolTip="Clip (Alt+X)" />
                     <Button x:Name="ReloadButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE72C;"
                             AutomationProperties.Name="Reload stream" ToolTipService.ToolTip="Reload (F5)" />
+                    <Button x:Name="ChaptersButton" x:FieldModifier="internal" Style="{StaticResource OverlayButton}" Content="&#xE8FD;" Visibility="Collapsed"
+                            AutomationProperties.Name="Chapters" ToolTipService.ToolTip="Chapters" />
                     <Button x:Name="SpeedButton" x:FieldModifier="internal" Style="{StaticResource OverlayTextButton}" Content="1x" Visibility="Collapsed"
                             AutomationProperties.Name="Playback speed" ToolTipService.ToolTip="Speed" />
                     <Button x:Name="QualityButton" x:FieldModifier="internal" Style="{StaticResource OverlayTextButton}"

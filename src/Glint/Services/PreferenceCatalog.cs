@@ -16,10 +16,11 @@ public static class PreferenceCatalog
     {
         ["Appearance"] = ["AccentColor", "CustomAccent", "BackgroundStyle", "InterfaceDensity", "SidebarWidth", "SidebarAvatarSize",
             "CardSize", "SidebarShowOffline", "SidebarSort"],
+        ["Home"] = ["HomeSections", "HomeHiddenSections", "HomeLiveRows"],
         ["Chat"] = ["ShowTimestamps", "TimestampFormat", "ChatFontSize", "ChatFontFamily", "PauseChatOnHover", "ShowBadges",
             "ShowSevenTvPaints", "ShowSevenTvBadges", "ChatMessageSpacing", "ChatLineSpacing", "EmoteScale", "EmoteAnimation", "AlternateChatRows", "EmoteSuggestions", "SyncChatToVideo"],
         ["Filtering"] = ["IgnoredWords", "IgnoredUsers", "ShowAnnouncements", "ShowSubscriptionNotices"],
-        ["Player"] = ["PreferredQuality", "LowLatency", "BlockAds", "NewTabVolume", "UseLastVolumeForNewTabs", "SeekSeconds", "LongSeekSeconds", "ControlsHideSeconds"],
+        ["Player"] = ["PreferredQuality", "LowLatency", "BlockAds", "NewTabVolume", "UseLastVolumeForNewTabs", "SeekSeconds", "LongSeekSeconds", "SkipMutedVod", "FollowRaids", "ControlsHideSeconds"],
         ["Multiview"] = ["MultiviewCount", "MultiviewLayout", "MultiviewChats", "MultiviewDock", "MultiviewChatWidth", "MultiviewChatHeight",
             "MultiviewVideoColumns", "MultiviewVideoRows", "MultiviewMainColumns", "MultiviewMainRows", "MultiviewChatColumns", "MultiviewChatRows"],
         ["Notifications"] = ["LiveAlertAllFollowed", "HighlightWords", "HighlightUsers", "FlashOnMention", "SoundOnMention", "SoundOnHighlight", "NotifyWhenFocused", "MentionTone", "HighlightTone", "NotificationVolume"],

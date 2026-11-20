@@ -47,6 +47,7 @@ public static class ImageCache
 {
     static readonly ConcurrentDictionary<string, AnimatedImage> Images = new();
     static readonly SemaphoreSlim DownloadGate = new(8, 8);
+    static readonly SemaphoreSlim AvatarDownloadGate = new(8, 8);
     static readonly SemaphoreSlim DecodeGate = new(Math.Max(2, Environment.ProcessorCount / 2));
 
     // Raised (on a worker thread) when any image finishes loading.
@@ -70,25 +71,43 @@ public static class ImageCache
         return Path.Combine(Paths.ImageCache, hash[..2], hash);
     }
 
+    internal static Task<byte[]> LoadAvatarBytesAsync(string url) => LoadBytesAsync(url, AvatarDownloadGate);
+
+    static async Task<byte[]> LoadBytesAsync(string url, SemaphoreSlim gate)
+    {
+        var path = CachePath(url);
+        try { return await File.ReadAllBytesAsync(path).ConfigureAwait(false); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+
+        await gate.WaitAsync().ConfigureAwait(false);
+        byte[] bytes;
+        try { bytes = await Net.Http.GetByteArrayAsync(url).ConfigureAwait(false); }
+        finally { gate.Release(); }
+
+        string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllBytesAsync(temporary, bytes).ConfigureAwait(false);
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        finally
+        {
+            try { File.Delete(temporary); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+        return bytes;
+    }
+
     static async Task LoadAsync(AnimatedImage img, EmoteInfo? owner)
     {
         try
         {
-            var path = CachePath(img.Url);
-            byte[]? bytes = null;
-            if (File.Exists(path))
-            {
-                try { bytes = await File.ReadAllBytesAsync(path); } catch { }
-            }
-            if (bytes == null)
-            {
-                await DownloadGate.WaitAsync();
-                try { bytes = await Net.Http.GetByteArrayAsync(img.Url); }
-                finally { DownloadGate.Release(); }
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                try { await File.WriteAllBytesAsync(path, bytes); } catch { }
-            }
-
+            var bytes = await LoadBytesAsync(img.Url, DownloadGate);
             await DecodeGate.WaitAsync();
             try { Decode(img, bytes); }
             finally { DecodeGate.Release(); }

@@ -25,7 +25,8 @@ public sealed partial class ChatHistoryWindow : Window
         view.IsHistoryView = true;
         Title = $"{title} - Glint";
         SystemBackdrop = new MicaBackdrop();
-        var root = new Grid { RequestedTheme = ElementTheme.Dark, Padding = new Thickness(24), RowSpacing = 12,
+        var root = new Grid { RequestedTheme = ElementTheme.Dark, KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden,
+            Padding = new Thickness(24), RowSpacing = 12,
             Background = (Brush)Application.Current.Resources["GlintBackgroundBrush"] };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

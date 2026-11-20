@@ -30,12 +30,21 @@
             <Color x:Key="GlintAccent">#A970FF</Color>
             <Color x:Key="GlintLive">#FF4F5E</Color>
             <SolidColorBrush x:Key="GlintAccentBrush" Color="{StaticResource GlintAccent}" />
-            <SolidColorBrush x:Key="GlintBackgroundBrush" Color="#18181C" />
+            <SolidColorBrush x:Key="GlintBackgroundBrush" Color="#0A0A0C" />
             <SolidColorBrush x:Key="GlintLiveBrush" Color="{StaticResource GlintLive}" />
-            <SolidColorBrush x:Key="GlintPanelBrush" Color="#B3141418" />
-            <SolidColorBrush x:Key="GlintPanelBorderBrush" Color="#14FFFFFF" />
-            <SolidColorBrush x:Key="GlintSubtleTextBrush" Color="#A0A0AB" />
-            <FontFamily x:Key="GlintFont">Segoe UI Variable Text</FontFamily>
+            <SolidColorBrush x:Key="GlintPanelBrush" Color="#0E0E11" />
+            <SolidColorBrush x:Key="GlintPanelBorderBrush" Color="#222227" />
+            <SolidColorBrush x:Key="GlintSubtleTextBrush" Color="#92929E" />
+            <FontFamily x:Key="GlintFont">ms-appx:///Assets/Fonts/InterTight.ttf#Inter Tight, Segoe UI Variable Text</FontFamily>
+            <FontFamily x:Key="GlintMonoFont">Cascadia Mono, Consolas</FontFamily>
+            <FontFamily x:Key="GlintIconFont">ms-appx:///Assets/Fonts/GlintIcons.ttf#Glint Icons</FontFamily>
+            <FontFamily x:Key="ContentControlThemeFontFamily">ms-appx:///Assets/Fonts/InterTight.ttf#Inter Tight, Segoe UI Variable Text</FontFamily>
+            <Style TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource GlintFont}" />
+            </Style>
+            <Style TargetType="FontIcon">
+                <Setter Property="FontFamily" Value="{StaticResource GlintIconFont}" />
+            </Style>
 
             <!-- Purple accent for selection / toggles -->
             <Color x:Key="SystemAccentColor">#9147FF</Color>

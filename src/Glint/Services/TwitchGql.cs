@@ -9,7 +9,9 @@ public sealed record StreamInfo(int Viewers, string Title, string? Game, DateTim
 public sealed record UserInfo(string Id, string Login, string DisplayName, string? AvatarUrl, StreamInfo? Stream);
 
 public sealed record VideoInfo(string Id, string Title, int LengthSeconds, DateTimeOffset CreatedAt, int Views, string? Thumbnail, string? Game,
-    string? ClipSlug = null, string? ClipBy = null);
+    string? ClipSlug = null, string? ClipBy = null, bool Recording = false);
+
+public sealed record VodChapter(double Start, double Length, string Name);
 
 public sealed record ChannelAbout(string? Description, int Followers, bool Partner, string? Banner, DateTimeOffset? LastLive, string? LastGame);
 
@@ -150,23 +152,118 @@ public static partial class TwitchGql
         string q = """
             query($login: String!) {
               user(login: $login) {
+                stream { previewImageURL(width: 320, height: 180) }
                 videos(first: 40, type: TYPE, sort: TIME) {
-                  edges { node { id title lengthSeconds createdAt viewCount previewThumbnailURL(width: 320, height: 180) game { displayName } } }
+                  edges { node { id title status lengthSeconds createdAt viewCount previewThumbnailURL(width: 320, height: 180) game { displayName } } }
                 }
               }
             }
             """;
         var data = await QueryAsync(q.Replace("TYPE", type), new { login = login.ToLowerInvariant() }, ct);
+        var user = data?.Obj("user") ?? default;
+        var livePreview = user.Obj("stream").Str("previewImageURL");
         var list = new List<VideoInfo>();
-        foreach (var edge in data?.Obj("user").Obj("videos").Arr("edges") ?? Enumerable.Empty<JsonElement>())
+        foreach (var edge in user.Obj("videos").Arr("edges"))
         {
             var n = edge.Obj("node");
             DateTimeOffset.TryParse(n.Str("createdAt"), out var created);
+            bool recording = n.Str("status") == "RECORDING";
             var thumb = n.Str("previewThumbnailURL");
-            if (thumb?.Contains("404_processing") == true) thumb = null; // still being processed (usually the current stream)
-            list.Add(new VideoInfo(n.Str("id") ?? "", n.Str("title") ?? "", n.Int("lengthSeconds"), created, n.Int("viewCount"), thumb, n.Obj("game").Str("displayName")));
+            // Twitch has no thumbnail until processing finishes; for the stream still going, show it live like the website does.
+            if (thumb?.Contains("404_processing") == true) thumb = recording ? livePreview : null;
+            list.Add(new VideoInfo(n.Str("id") ?? "", n.Str("title") ?? "", n.Int("lengthSeconds"), created, n.Int("viewCount"), thumb,
+                n.Obj("game").Str("displayName"), Recording: recording));
         }
         return list;
+    }
+
+    // Current details for VODs you've part-watched, by id. A missing id means Twitch deleted that VOD.
+    public static async Task<Dictionary<string, (VideoInfo Video, string Login, string Channel)>> GetVideosByIdAsync(IEnumerable<string> ids, CancellationToken ct = default)
+    {
+        var list = ids.Where(id => id.Length > 0 && id.All(char.IsAsciiDigit)).Distinct().Take(10).ToList();
+        var result = new Dictionary<string, (VideoInfo, string, string)>();
+        if (list.Count == 0) return result;
+        const string fields = """
+            id title status lengthSeconds createdAt viewCount previewThumbnailURL(width: 320, height: 180) game { displayName }
+            owner { login displayName stream { previewImageURL(width: 320, height: 180) } }
+            """;
+        var q = "query { " + string.Join(" ", list.Select((id, i) => $"v{i}: video(id: \"{id}\") {{ {fields} }}")) + " }";
+        var data = await QueryAsync(q, new { }, ct) ?? throw new HttpRequestException("No answer from Twitch");
+        for (int i = 0; i < list.Count; i++)
+        {
+            var n = data.Obj($"v{i}");
+            if (n.ValueKind != JsonValueKind.Object || n.Str("id") is not { } id) continue;
+            DateTimeOffset.TryParse(n.Str("createdAt"), out var created);
+            bool recording = n.Str("status") == "RECORDING";
+            var owner = n.Obj("owner");
+            var thumb = n.Str("previewThumbnailURL");
+            if (thumb?.Contains("404_processing") == true) thumb = recording ? owner.Obj("stream").Str("previewImageURL") : null;
+            var video = new VideoInfo(id, n.Str("title") ?? "", n.Int("lengthSeconds"), created, n.Int("viewCount"), thumb,
+                n.Obj("game").Str("displayName"), Recording: recording);
+            result[id] = (video, owner.Str("login") ?? "", owner.Str("displayName") ?? "");
+        }
+        return result;
+    }
+
+    // A raid the channel has started and not yet sent, or null.
+    public static async Task<(string Id, string Target, string TargetName, int Viewers)?> GetRaidAsync(string login, CancellationToken ct = default)
+    {
+#if DEBUG
+        // Raids are hard to catch live, so a debug build can pretend one is under way.
+        if (Environment.GetEnvironmentVariable("GLINT_TEST_RAID") is { Length: > 0 } fake) return ("test-" + login, fake, fake, 1234);
+#endif
+        const string q = """
+            query($login: String!) {
+              user(login: $login) { raid { id viewerCount targetChannel { login displayName } } }
+            }
+            """;
+        var data = await QueryAsync(q, new { login = login.ToLowerInvariant() }, ct);
+        var raid = data?.Obj("user").Obj("raid") ?? default;
+        if (raid.ValueKind != JsonValueKind.Object || raid.Str("id") is not { } id || raid.Obj("targetChannel").Str("login") is not { } target) return null;
+        return (id, target, raid.Obj("targetChannel").Str("displayName") ?? target, raid.Int("viewerCount"));
+    }
+
+    // Where the game changes in a VOD, in order. A VOD that stays on one game has a single chapter.
+    public static async Task<List<VodChapter>> GetChaptersAsync(string videoId, CancellationToken ct = default)
+    {
+        const string q = """
+            query($id: ID!) {
+              video(id: $id) {
+                moments(first: 100, momentRequestType: VIDEO_CHAPTER_MARKERS) {
+                  edges { node { positionMilliseconds durationMilliseconds description details { ... on GameChangeMomentDetails { game { displayName } } } } }
+                }
+              }
+            }
+            """;
+        var data = await QueryAsync(q, new { id = videoId }, ct);
+        return (data?.Obj("video").Obj("moments").Arr("edges") ?? Enumerable.Empty<JsonElement>())
+            .Select(e => e.Obj("node"))
+            .Select(n => new VodChapter(n.Int("positionMilliseconds") / 1000.0, n.Int("durationMilliseconds") / 1000.0,
+                n.Obj("details").Obj("game").Str("displayName") ?? n.Str("description") ?? "Chapter"))
+            .OrderBy(c => c.Start)
+            .ToList();
+    }
+
+    // Stretches of a VOD whose audio Twitch muted for copyrighted music, joined where they run into each other.
+    public static async Task<List<(double Start, double End)>> GetMutedRangesAsync(string videoId, CancellationToken ct = default)
+    {
+        const string q = """
+            query($id: ID!) {
+              video(id: $id) { muteInfo { mutedSegmentConnection { nodes { offset duration } } } }
+            }
+            """;
+        var data = await QueryAsync(q, new { id = videoId }, ct);
+        var segments = (data?.Obj("video").Obj("muteInfo").Obj("mutedSegmentConnection").Arr("nodes") ?? Enumerable.Empty<JsonElement>())
+            .Select(n => (Start: (double)n.Int("offset"), End: (double)n.Int("offset") + n.Int("duration")))
+            .Where(s => s.End > s.Start)
+            .OrderBy(s => s.Start);
+        var ranges = new List<(double Start, double End)>();
+        foreach (var s in segments)
+        {
+            if (ranges.Count > 0 && s.Start <= ranges[^1].End + 1) ranges[^1] = (ranges[^1].Start, Math.Max(ranges[^1].End, s.End));
+            else ranges.Add(s);
+        }
+        return ranges;
     }
 
     // period is LAST_DAY, LAST_WEEK, LAST_MONTH or ALL_TIME; most viewed first.

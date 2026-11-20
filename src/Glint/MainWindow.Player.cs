@@ -30,7 +30,7 @@ public sealed partial class MainWindow
     void HideIdleOverlay()
     {
         if (_overlay.IsPointerInside || _player?.Paused == true || _seekDragging || DateTime.UtcNow < _clipToastUntil ||
-            OverlayMenuOpen) return;
+            _raid != null || OverlayMenuOpen) return;
         _overlay.HideOverlay();
         _overlayTimer.Stop();
     }
@@ -482,7 +482,8 @@ public sealed partial class MainWindow
         var point = area.TransformToVisual(Root).TransformPoint(new Point());
         int width = (int)Math.Round(area.ActualWidth * scale), height = (int)Math.Round(area.ActualHeight * scale);
         int overlayHeight = Math.Min(height, (int)Math.Round((96 + (_overlay.IsCompact ? 38 : 0) + (_active?.Vod != null ? 24 : 0)
-            + (!MultiviewActive && (_fullscreen || S.Theatre) ? 44 : 0) + (_overlay.ClipToast.Visibility == Visibility.Visible ? 48 : 0)) * scale));
+            + (!MultiviewActive && (_fullscreen || S.Theatre) ? 44 : 0) + (_overlay.ClipToast.Visibility == Visibility.Visible ? 48 : 0)
+            + (_overlay.RaidToast.Visibility == Visibility.Visible ? 48 : 0)) * scale));
         var screen = new NativePoint { X = (int)Math.Round(point.X * scale), Y = (int)Math.Round(point.Y * scale) + height - overlayHeight };
         if (!ClientToScreen(_hwnd, ref screen)) return;
         _overlay.Place(screen.X, screen.Y, width, overlayHeight);
@@ -591,6 +592,7 @@ public sealed partial class MainWindow
     void UpdateOverlayState()
     {
         if (_closing) return;
+        UpdateMediaInfo();
         var tab = _active;
         bool vod = tab?.Vod != null;
         bool paused = _player?.Paused == true;

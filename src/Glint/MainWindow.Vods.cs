@@ -9,23 +9,70 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Glint;
 
-public sealed class VodItem
+public sealed class VodItem : System.ComponentModel.INotifyPropertyChanged
 {
-    public VodItem(VideoInfo v)
+    // channel: shown on the home page, where the card says whose it is and how much is left instead.
+    public VodItem(VideoInfo v, string? login = null, string? channel = null)
     {
+        Login = login;
         Video = v;
         Title = v.Title;
         Length = FormatTime(v.LengthSeconds);
-        Meta = string.Join("  ·  ", new[] { Ago(v.CreatedAt), $"{ChannelEntry.FormatCount(v.Views)} views",
+        Meta = string.Join("  ·  ", new[] { v.Recording ? "Live now" : Ago(v.CreatedAt), $"{ChannelEntry.FormatCount(v.Views)} views",
             v.ClipBy != null ? $"Clipped by {v.ClipBy}" : v.Game }.Where(s => s != null));
         if (v.Thumbnail != null) Thumbnail = new BitmapImage(new Uri(v.Thumbnail)) { DecodePixelWidth = 256 };
+        // How far you got last time, as a bar along the bottom of the thumbnail.
+        double saved = MainWindow.SavedVodPosition(v);
+        if (saved > 0 && v.LengthSeconds > 0)
+        {
+            Progress = Math.Clamp(saved / v.LengthSeconds, 0.02, 1);
+            ProgressVisibility = Visibility.Visible;
+            Length = $"{FormatTime(saved)} / {Length}";
+            if (channel != null)
+            {
+                Meta = channel;
+                TimeLeft = $"  ·  {Left(v.LengthSeconds - saved)} left";
+            }
+        }
     }
 
+    static string Left(double seconds)
+    {
+        var t = TimeSpan.FromSeconds(Math.Max(60, seconds));
+        return t.TotalHours >= 1 ? $"{(int)t.TotalHours} hr {t.Minutes} min" : $"{t.Minutes} min";
+    }
+
+    public string? Login { get; }
     public VideoInfo Video { get; }
     public string Title { get; }
     public string Length { get; }
     public string Meta { get; }
+    public string TimeLeft { get; } = "";
     public ImageSource? Thumbnail { get; }
+    public double Progress { get; }
+    public Visibility ProgressVisibility { get; } = Visibility.Collapsed;
+    // The bar is two star columns: watched, then the rest.
+    public GridLength Watched => new(Progress, GridUnitType.Star);
+    public GridLength Unwatched => new(1 - Progress, GridUnitType.Star);
+    // The length badge sits clear of the progress bar when there is one.
+    public Thickness BadgeMargin => ProgressVisibility == Visibility.Visible ? new(6, 6, 6, 16) : new(6);
+
+    // Set on the home page: the card gets an X (on hover) that takes it off Continue watching.
+    public Action<VodItem>? Removed { get; init; }
+    bool _hovered;
+    public Visibility RemoveVisibility => Removed != null && _hovered ? Visibility.Visible : Visibility.Collapsed;
+    public void ShowRemove() => SetHovered(true);
+    public void HideRemove() => SetHovered(false);
+    public void Remove() => Removed?.Invoke(this);
+
+    void SetHovered(bool hovered)
+    {
+        if (_hovered == hovered || Removed == null) return;
+        _hovered = hovered;
+        PropertyChanged?.Invoke(this, new(nameof(RemoveVisibility)));
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 
     public override string ToString() => Title; // what screen readers announce
 
@@ -81,7 +128,7 @@ public sealed partial class MainWindow
         {
             if (e.ClickedItem is not VodItem item || _active == null) return;
             CloseVodPanel();
-            _ = PlayVodAsync(_active, item.Video, 0);
+            _ = PlayVodAsync(_active, item.Video, SavedVodPosition(item.Video));
         };
         GoLiveButton.Click += (_, _) => { if (_active != null) ExitVod(_active); };
         _overlay.GoLiveButton.Click += (_, _) => { if (_active != null) ExitVod(_active); };
@@ -144,7 +191,10 @@ public sealed partial class MainWindow
         // The track is inset from the slider's edges by about half the thumb.
         double track = Math.Max(1, seek.ActualWidth - 20);
         double fraction = Math.Clamp((x - 10) / track, 0, 1);
-        _overlay.SeekPreviewText.Text = VodItem.FormatTime(fraction * seek.Maximum);
+        double at = fraction * seek.Maximum;
+        _overlay.SeekPreviewText.Text = _active is { Chapters.Count: > 1 } tab && ChapterAt(tab, at) is { } chapter
+            ? $"{VodItem.FormatTime(at)}  ·  {chapter.Name}"
+            : VodItem.FormatTime(at);
         _overlay.SeekPreview.Visibility = Visibility.Visible;
         _overlay.SeekPreview.Measure(new Windows.Foundation.Size(200, 40));
         double w = _overlay.SeekPreview.DesiredSize.Width;
@@ -276,13 +326,20 @@ public sealed partial class MainWindow
 
         if (tab.Vod?.Id != video.Id || tab.Replay == null)
         {
+            RememberVodPosition(tab, now: true); // the one being swapped out
             tab.Replay = new ChatChannel(tab.Chat);
             // Clips have no chat replay of their own.
             tab.ReplayEngine = video.ClipSlug == null ? new VodReplay(video.Id, tab.Replay) : null;
             if (video.ClipSlug != null) tab.Replay.AddSystem("Chat replay isn't available for clips.");
         }
+        bool sameVideo = tab.Vod?.Id == video.Id;
         tab.Vod = video;
         tab.VodPosition = start;
+        if (!sameVideo)
+        {
+            _ = LoadMutedRangesAsync(tab, video);
+            _ = LoadChaptersAsync(tab, video);
+        }
         if (tab == _active)
         {
             _vodTimer.Stop();
@@ -328,6 +385,7 @@ public sealed partial class MainWindow
 
     void ExitVod(ChannelTab tab)
     {
+        RememberVodPosition(tab, now: true);
         tab.Vod = null;
         tab.Replay = null;
         tab.ReplayEngine = null;
@@ -349,6 +407,7 @@ public sealed partial class MainWindow
             {
                 if (tab.Playback.Player?.TimePos is not { } position) continue;
                 tab.VodPosition = position;
+                RememberVodPosition(tab);
                 tab.ReplayEngine?.Tick(position);
             }
         }
@@ -357,6 +416,9 @@ public sealed partial class MainWindow
         if (_player.TimePos is not { } pos) return;
         var duration = _player.Duration ?? vod.LengthSeconds;
         _active.VodPosition = pos;
+        RememberVodPosition(_active);
+        UpdateMutedNotice(_active, pos);
+        UpdateCurrentChapter(_active, pos);
 
         if (!_seekDragging)
         {
@@ -384,6 +446,9 @@ public sealed partial class MainWindow
         VodBadgeText.Text = tab?.Vod?.ClipSlug != null ? "CLIP" : "VOD";
         UpdateOverlayState();
         if (vod) UpdateVodTime(tab!.VodPosition);
+        else HideMutedNotice();
+        DrawSeekMarks();
+        SetChapterItems();
         UpdateVideoBounds();
     }
 }

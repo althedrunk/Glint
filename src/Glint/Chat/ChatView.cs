@@ -703,6 +703,7 @@ public sealed partial class ChatView : UserControl, IDisposable
 
         DrawPill(ds, viewW, viewH);
         DrawTooltip(ds, viewW, viewH, now);
+        DrawReplyPreview(ds, viewW, now);
         _lastDrawAnimated = animated;
         if (animated) RequestFrame();
     }
@@ -863,6 +864,53 @@ public sealed partial class ChatView : UserControl, IDisposable
     }
 
 
+    // A copy of the message being previewed, so drawing it narrower doesn't throw away its own layout.
+    (ChatMessage Source, ChatMessage Copy)? _replyPreview;
+
+    // Hovering a "Replying to" line shows the message it answers, as chat showed it, without having to click.
+    void DrawReplyPreview(CanvasDrawingSession ds, float viewW, long now)
+    {
+        if (_pointer is not { } p || _replyLineHits.FirstOrDefault(h => h.Rect.Contains(p)) is not { Msg: { } reply } hit) return;
+        float boxW = Math.Min(viewW - 16, 380);
+        float inner = boxW - PadX * 2;
+        MessageLayout? lay = null;
+        CanvasTextLayout? fallback = null;
+        if (reply.ReplyParentId is { } id && _channel?.FindMessage(id) is { } original)
+        {
+            if (_replyPreview?.Source != original) _replyPreview = (original, original.CopyForView());
+            lay = GetLayout(_replyPreview.Value.Copy, inner);
+        }
+        else
+        {
+            // Too old to still be in chat: show the quoted text in full.
+            fallback = new CanvasTextLayout(ds, $"@{reply.ReplyName}: {reply.ReplyBody}", _format, inner, 400)
+                { Options = CanvasDrawTextOptions.EnableColorFont };
+        }
+        float contentH = lay != null ? lay.Height : (float)fallback!.LayoutBounds.Height + PadY * 2;
+        float boxH = contentH + 8;
+        float bx = Math.Clamp((float)p.X - boxW / 3, 8, Math.Max(8, viewW - boxW - 8));
+        float by = (float)hit.Rect.Top - boxH - 6;
+        if (by < 6) by = (float)hit.Rect.Bottom + 6;
+
+        ds.FillRoundedRectangle(bx, by + 3, boxW, boxH, 10, 10, Color.FromArgb(110, 0, 0, 0));
+        ds.FillRoundedRectangle(bx, by, boxW, boxH, 10, 10, Color.FromArgb(250, 28, 28, 33));
+        ds.DrawRoundedRectangle(bx, by, boxW, boxH, 10, 10, Color.FromArgb(40, 255, 255, 255));
+        float tx = bx + PadX, top = by + 4;
+        if (fallback != null)
+        {
+            ds.DrawTextLayout(fallback, tx, top + PadY, TextColor);
+            fallback.Dispose();
+            return;
+        }
+        if (lay!.Reply != null) ds.DrawTextLayout(lay.Reply, tx, top + lay.ReplyY, SubtleColor);
+        float ty = top + lay.TextY;
+        if (lay.NameBrush != null) PreparePaint(ds, lay, tx, ty, now);
+        if (lay.Text != null) ds.DrawTextLayout(lay.Text, tx, ty, TextColor);
+        foreach (var it in lay.Inlines)
+            if (it.Image.FrameAt(0) is { } frame)
+                ds.DrawImage(frame, new Rect(it.Rect.X + tx, it.Rect.Y + ty, it.Rect.Width, it.Rect.Height), frame.Bounds, 1f, CanvasImageInterpolation.HighQualityCubic);
+    }
+
     void OnWheel(object sender, PointerRoutedEventArgs e)
     {
         var delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
@@ -953,7 +1001,7 @@ public sealed partial class ChatView : UserControl, IDisposable
         }
         if (CanReply(m))
         {
-            var reply = new MenuFlyoutItem { Text = "Reply", Icon = new SymbolIcon(Symbol.Back) };
+            var reply = new MenuFlyoutItem { Text = "Reply", Icon = new FontIcon { Glyph = "\uE72B" } };
             reply.Click += (_, _) => ReplyRequested?.Invoke(m);
             menu.Items.Add(reply);
         }

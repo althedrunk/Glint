@@ -147,11 +147,18 @@ public sealed class ChatChannel
         RoomId = roomId;
         _globalBadges ??= TwitchGql.GetBadgesAsync(null);
         var badges = TwitchGql.GetBadgesAsync(Login);
-        var emotes = Emotes.LoadAsync(roomId);
         var recent = LoadRecentAsync();
-        try { await Task.WhenAll(_globalBadges, badges, emotes); }
+        // Last time's emotes from disk first (instant), then fresh ones from the services.
+        try { await Emotes.LoadCachedAsync(roomId); }
+        catch (Exception ex) { Log.Error($"Cached emotes {Login}", ex); }
+        int cachedCount = Emotes.Count;
+        var emotes = Emotes.LoadAsync(roomId);
+        try { await Task.WhenAll(_globalBadges, badges); }
         catch (Exception ex) { Log.Error($"Init {Login}", ex); }
         if (badges.IsCompletedSuccessfully) _channelBadges = badges.Result;
+        // Don't hold chat back for a slow emote service; whatever arrives late gets filled in afterwards.
+        bool late = await Task.WhenAny(emotes, Task.Delay(2500)) != emotes;
+        if (late) _ = FinishEmotesAsync(emotes, cachedCount);
 
         var history = await recent;
         foreach (var line in history)
@@ -165,8 +172,22 @@ public sealed class ChatChannel
         }
         Enqueue(ChatMessage.System(Emotes.Count > 0
             ? $"Joined #{Login} ({Emotes.Count} 7TV/BTTV/FFZ emotes)"
-            : $"Joined #{Login}"));
+            : late ? $"Joined #{Login} (emotes still loading)" : $"Joined #{Login}"));
     }
+
+    async Task FinishEmotesAsync(Task load, int cachedCount)
+    {
+        try { await load; }
+        catch (Exception ex) { Log.Error($"Emotes {Login}", ex); }
+        // With last time's emotes already showing there's nothing to announce, just catch up any new ones.
+        if (cachedCount == 0 && Emotes.Count > 0) Enqueue(ChatMessage.System($"Loaded {Emotes.Count} 7TV/BTTV/FFZ emotes"));
+        RefreshEmotes();
+    }
+
+    // Emotes changed after messages were shown: Drain re-checks the older ones on the UI thread.
+    public void RefreshEmotes() => Enqueue(new EmotesChangedOp());
+
+    sealed record EmotesChangedOp;
 
     async Task<List<string>> LoadRecentAsync()
     {
@@ -305,6 +326,7 @@ public sealed class ChatChannel
 
     void Enqueue(object item, bool live = false)
     {
+        if (item is ChatMessage message) message.EmoteVersion = Emotes.Version;
         lock (_historyLock)
         {
             if (live) _held.Enqueue((item, Environment.TickCount64));
@@ -330,8 +352,13 @@ public sealed class ChatChannel
             switch (item)
             {
                 case ChatMessage msg:
+                    if (msg.EmoteVersion != Emotes.Version) AddLateEmotes(msg); // held back while emotes loaded
                     Messages.Add(msg);
                     added.Add(msg);
+                    break;
+                case EmotesChangedOp:
+                    foreach (var msg in Messages)
+                        if (msg.EmoteVersion != Emotes.Version) AddLateEmotes(msg);
                     break;
                 case DeleteOp { MessageId: { } id }:
                     if (FindMessage(id) is { } deleted) deleted.Deleted = true;
@@ -351,6 +378,12 @@ public sealed class ChatChannel
         }
         if (Messages.Count > MaxMessages) Messages.RemoveRange(0, Messages.Count - MaxMessages);
         return added;
+    }
+
+    void AddLateEmotes(ChatMessage msg)
+    {
+        msg.EmoteVersion = Emotes.Version;
+        if (MessageBuilder.AddLateEmotes(msg, this)) msg.Layout = null;
     }
 
     // Anything not held back first, then live chat whose delay is up. Only the UI thread takes from these.

@@ -25,5 +25,11 @@ public partial class App : Application
     {
         Window = new MainWindow();
         Window.Activate();
+        // Started with Windows: wait in the tray (or the taskbar) for go-live alerts.
+        if (Program.StartedInBackground)
+        {
+            if (Settings.Current.CloseToTray) Window.HideToTray();
+            else if (Window.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) presenter.Minimize();
+        }
     }
 }

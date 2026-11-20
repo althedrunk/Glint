@@ -8,7 +8,7 @@ namespace Glint;
 
 public sealed class StreamCard
 {
-    public StreamCard(BrowseStream s)
+    public StreamCard(BrowseStream s, ImageSource? avatar = null)
     {
         Stream = s;
         Title = s.Live ? s.Title ?? "" : "Offline";
@@ -20,7 +20,8 @@ public sealed class StreamCard
         // Twitch caches previews for a few minutes; a changing query string keeps them fresh.
         if (s.Thumbnail != null) Thumbnail = new BitmapImage(new Uri($"{s.Thumbnail}?t={DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute / 2}")) { DecodePixelWidth = 292 };
         else if (s.Avatar != null) Thumbnail = new BitmapImage(new Uri(s.Avatar)) { DecodePixelWidth = 164 };
-        if (s.Avatar != null) Avatar = new BitmapImage(new Uri(s.Avatar)) { DecodePixelWidth = 64 };
+        Avatar = avatar;
+        if (Avatar == null && s.Avatar != null) Avatar = new BitmapImage(new Uri(s.Avatar)) { DecodePixelWidth = 64 };
     }
 
     public BrowseStream Stream { get; }

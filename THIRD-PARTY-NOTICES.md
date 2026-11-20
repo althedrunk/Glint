@@ -8,6 +8,7 @@ Glint's own source code is MIT licensed. Other components retain their own licen
 - WebView2 SDK: https://learn.microsoft.com/microsoft-edge/webview2/
 - SkiaSharp and Skia: https://github.com/mono/SkiaSharp
 - Inno Setup (installer): https://jrsoftware.org/
+- Inter Tight (SIL Open Font License 1.1): https://github.com/rsms/inter-tight
 
 The Windows download does not contain libmpv. When video playback is first requested, Glint offers to download the Windows x64 LGPL build directly from mpv's official development release:
 

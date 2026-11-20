@@ -20,9 +20,11 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <Version>0.3.2</Version>
+    <Version>0.4.0</Version>
     <Product>Glint</Product>
     <Description>Glint - a fast Twitch client with 7TV</Description>
+    <!-- Program.cs has its own Main, to keep to one running Glint -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

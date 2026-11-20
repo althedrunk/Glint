@@ -23,23 +23,29 @@ Requires 64-bit Windows 10 version 2004 or later, or Windows 11. Tested on Windo
 - Drag to resize multiview videos and chats, or fullscreen a single stream.
 - Pick multiview channels from your live follows or a Twitch search, and type straight into the chat you want.
 - Show or hide each multiview stream's chat on its own from the player's chat button or the chat's close button.
-- Pop the stream out into an always-on-top mini player (Alt+P).
-- Home page with your live followed channels and recently watched ones.
+- Pop the stream out into an always-on-top mini player (Alt+P), picture-in-picture style.
+- Home page with your live followed channels, videos to continue and recently watched channels. Choose which sections show, their order and how many rows of live channels.
 - Reopen live tabs, all tabs, or start on the home page at launch.
 - Built-in updates from GitHub releases, with release notes, for installed and portable copies.
 - Browse channels and categories, and create clips from the player.
-- Chat with Twitch, 7TV, BTTV and FFZ emotes, replies, mentions and searchable message history.
+- Chat with Twitch, 7TV, BTTV and FFZ emotes, replies, mentions and searchable message history. Hover a reply to see the message it answers.
+- Emote lists are kept on disk, so channels you've opened before have their emotes straight away.
 - Chat stays in sync with the video by holding messages back by the stream's delay.
 - Take part in channel-point predictions and polls from a card above chat.
-- Go-live notifications for the channels you choose.
+- Go-live notifications for the channels you choose, with options to start Glint when you sign in to Windows and to keep it running in the tray when closed.
 - Channel pages with past broadcasts, highlights and clips. Click a streamer's name to open one.
+- Past broadcasts pick up where you left off, even after closing Glint, with your progress shown on each video and a Continue watching row on the home page.
+- Parts of past broadcasts Twitch muted for copyrighted audio are marked on the seek bar, with a countdown to when the sound returns and a Skip button. They can also be skipped automatically.
+- Chapters in past broadcasts: ticks on the seek bar where the game changes and a menu to jump between them.
+- Follow raids: when the channel you're watching raids someone, Glint follows after a short countdown, or asks first.
+- Works with Windows media controls, so the keyboard's play/pause key works from anywhere and the stream shows in the media panel.
 - Customise the appearance, chat, notifications and shortcuts, with saved profiles and layouts.
 
 Watching and reading chat work without an account. Sign in with Twitch for sending messages, followed channels, your emotes and supported subscriber and Turbo benefits.
 
 ## Demo screenshots
 
-Screenshots use fictional channels and messages with placeholder video.
+The Broadcast interface in single view and multiview, shown with fictional channels, chat and placeholder video.
 
 ![Glint in single view with player controls, channel tabs and chat](docs/screenshots/single-view.png)
 

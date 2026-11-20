@@ -37,9 +37,9 @@ static class Appearance
         Brush("GlintAccentBrush", accent);
         if (r.ThemeDictionaries["Dark"] is ResourceDictionary dark && dark["GlintThemeAccent"] is SolidColorBrush themeAccent)
             themeAccent.Color = accent;
-        byte shade = Settings.Current.BackgroundStyle switch { "Black" => 0, "Grey" => 36, _ => 24 };
-        Brush("GlintBackgroundBrush", Color.FromArgb(255, shade, shade, (byte)(shade == 0 ? 0 : shade + 4)));
-        Brush("GlintPanelBrush", Color.FromArgb(255, (byte)(shade + 4), (byte)(shade + 4), (byte)(shade + 8)));
+        byte shade = Settings.Current.BackgroundStyle switch { "Black" => 0, "Grey" => 30, _ => 10 };
+        Brush("GlintBackgroundBrush", Color.FromArgb(255, shade, shade, (byte)(shade == 0 ? 0 : shade + 2)));
+        Brush("GlintPanelBrush", Color.FromArgb(255, (byte)(shade + 4), (byte)(shade + 4), (byte)(shade + 7)));
         return accentChanged;
     }
 

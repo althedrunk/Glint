@@ -74,7 +74,8 @@ public sealed partial class SettingsWindow : Window
 
     static TextBlock Heading(string text, bool first = false) => new()
     {
-        Text = text, FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, first ? 0 : 18, 0, 2),
+        Text = text.ToUpperInvariant(), FontSize = 11, CharacterSpacing = 140, Foreground = Subtle,
+        FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, first ? 0 : 18, 0, 2),
     };
 
     internal static Border IgnoreWordsRow(MainWindow window)
@@ -98,11 +99,9 @@ public sealed partial class SettingsWindow : Window
     static Border Card(UIElement content) => new()
     {
         Child = content,
-        Padding = new Thickness(16, 12, 16, 12),
-        CornerRadius = new CornerRadius(6),
-        BorderThickness = new Thickness(1),
-        Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-        BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+        Padding = new Thickness(0, 14, 0, 14),
+        BorderThickness = new Thickness(0, 0, 0, 1),
+        BorderBrush = (Brush)Application.Current.Resources["GlintPanelBorderBrush"],
     };
 
     // One settings line: label (and optional description) on the left, the control on the right.

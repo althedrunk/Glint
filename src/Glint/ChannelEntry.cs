@@ -13,24 +13,49 @@ public sealed partial class ChannelEntry : INotifyPropertyChanged
 
     public string Login { get; }
     public double AvatarSize => Settings.Current.SidebarAvatarSize;
-    public CornerRadius AvatarRadius => new(AvatarSize / 2);
     public Thickness RowPadding => new(2, Settings.Current.InterfaceDensity == "Compact" ? 2 : 6, 2,
         Settings.Current.InterfaceDensity == "Compact" ? 2 : 6);
-    public void RefreshAppearance() { Raise(nameof(AvatarSize)); Raise(nameof(AvatarRadius)); Raise(nameof(RowPadding)); }
+    public void RefreshAppearance() { Raise(nameof(AvatarSize)); Raise(nameof(RowPadding)); }
     public string? Id { get; private set; }
 
     string? _displayName;
     public string DisplayName => _displayName ?? Login;
+    public override string ToString() => DisplayName; // what screen readers announce for list items
 
     string? _avatarUrl;
     ImageSource? _avatar;
     public string? AvatarUrl => _avatarUrl;
-    public ImageSource? Avatar => _avatar ??= _avatarUrl != null
-        ? new BitmapImage(new Uri(_avatarUrl)) { DecodePixelWidth = 64, DecodePixelType = DecodePixelType.Logical }
-        : null;
+    public ImageSource? Avatar
+    {
+        get
+        {
+            if (_avatar == null && Uri.TryCreate(_avatarUrl, UriKind.Absolute, out var uri))
+            {
+                var bitmap = new BitmapImage { DecodePixelWidth = 64, DecodePixelType = DecodePixelType.Logical };
+                _avatar = bitmap;
+                _ = LoadAvatarAsync(bitmap, uri);
+            }
+            return _avatar;
+        }
+    }
+
+    static async Task LoadAvatarAsync(BitmapImage bitmap, Uri uri)
+    {
+        try
+        {
+            var bytes = await ImageCache.LoadAvatarBytesAsync(uri.AbsoluteUri);
+            using var stream = new MemoryStream(bytes).AsRandomAccessStream();
+            await bitmap.SetSourceAsync(stream);
+        }
+        catch
+        {
+            bitmap.UriSource = uri;
+        }
+    }
 
     public StreamInfo? Stream { get; private set; }
     public bool IsLive => Stream != null;
+    public Brush LiveRingBrush => (Brush)Application.Current.Resources[IsLive ? "GlintLiveBrush" : "GlintPanelBorderBrush"];
     public bool Known { get; private set; }
 
     bool _isFavorite, _isFollowed;
@@ -60,6 +85,7 @@ public sealed partial class ChannelEntry : INotifyPropertyChanged
         Raise(nameof(DisplayName));
         Raise(nameof(Stream));
         Raise(nameof(IsLive));
+        Raise(nameof(LiveRingBrush));
         Raise(nameof(Subtitle));
         Raise(nameof(ViewersText));
         Raise(nameof(LiveVisibility));

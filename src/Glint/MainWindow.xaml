@@ -16,7 +16,7 @@
                 <Setter Property="Height" Value="34" />
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="CornerRadius" Value="6" />
-                <Setter Property="FontFamily" Value="{ThemeResource SymbolThemeFontFamily}" />
+                <Setter Property="FontFamily" Value="{StaticResource GlintIconFont}" />
                 <Setter Property="FontSize" Value="15" />
             </Style>
 
@@ -36,13 +36,15 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="{x:Bind AvatarSize, Mode=OneWay}" Height="{x:Bind AvatarSize, Mode=OneWay}" CornerRadius="{x:Bind AvatarRadius, Mode=OneWay}" Background="#26FFFFFF">
-                        <Border CornerRadius="{x:Bind AvatarRadius, Mode=OneWay}">
-                            <Border.Background>
+                    <Grid Width="{x:Bind AvatarSize, Mode=OneWay}" Height="{x:Bind AvatarSize, Mode=OneWay}" VerticalAlignment="Center">
+                        <Ellipse Stroke="{x:Bind LiveRingBrush, Mode=OneWay}" StrokeThickness="1.5" />
+                        <Ellipse Margin="3" Fill="#26FFFFFF" />
+                        <Ellipse Margin="3">
+                            <Ellipse.Fill>
                                 <ImageBrush ImageSource="{x:Bind Avatar, Mode=OneWay}" Stretch="UniformToFill" />
-                            </Border.Background>
-                        </Border>
-                    </Border>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                    </Grid>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" FontWeight="SemiBold" FontSize="13.5" TextTrimming="CharacterEllipsis" />
@@ -54,7 +56,7 @@
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center"
                                 Visibility="{x:Bind LiveVisibility, Mode=OneWay}">
                         <Ellipse Width="7" Height="7" Fill="{StaticResource GlintLiveBrush}" />
-                        <TextBlock Text="{x:Bind ViewersText, Mode=OneWay}" FontSize="12" />
+                        <TextBlock Text="{x:Bind ViewersText, Mode=OneWay}" FontSize="11" FontFamily="{StaticResource GlintMonoFont}" MinWidth="34" TextAlignment="Right" />
                     </StackPanel>
                 </Grid>
             </DataTemplate>
@@ -79,7 +81,7 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" Visibility="{x:Bind LiveVisibility}">
                         <Ellipse Width="7" Height="7" Fill="{StaticResource GlintLiveBrush}" />
-                        <TextBlock Text="{x:Bind ViewersText}" FontSize="12" />
+                        <TextBlock Text="{x:Bind ViewersText}" FontSize="11" FontFamily="{StaticResource GlintMonoFont}" />
                     </StackPanel>
                 </Grid>
             </DataTemplate>
@@ -88,13 +90,15 @@
                 <Grid Width="36" Height="40" Background="Transparent"
                       Opacity="{x:Bind ItemOpacity, Mode=OneWay}"
                       ToolTipService.ToolTip="{x:Bind Tooltip, Mode=OneWay}">
-                    <Border Width="34" Height="34" CornerRadius="17" Background="#26FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Border CornerRadius="17">
-                            <Border.Background>
+                    <Grid Width="34" Height="34" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Ellipse Stroke="{x:Bind LiveRingBrush, Mode=OneWay}" StrokeThickness="1.5" />
+                        <Ellipse Margin="3" Fill="#26FFFFFF" />
+                        <Ellipse Margin="3">
+                            <Ellipse.Fill>
                                 <ImageBrush ImageSource="{x:Bind Avatar, Mode=OneWay}" Stretch="UniformToFill" />
-                            </Border.Background>
-                        </Border>
-                    </Border>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                    </Grid>
                     <Ellipse Width="11" Height="11" Fill="{StaticResource GlintLiveBrush}" Stroke="#FF1C1C21" StrokeThickness="2"
                              HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,3"
                              Visibility="{x:Bind LiveVisibility, Mode=OneWay}" />
@@ -105,13 +109,13 @@
                 <StackPanel Width="96" Padding="0,8,0,6" Spacing="6" Opacity="{x:Bind ItemOpacity, Mode=OneWay}"
                             ToolTipService.ToolTip="{x:Bind Tooltip, Mode=OneWay}">
                     <Grid Width="56" Height="56" HorizontalAlignment="Center">
-                        <Border CornerRadius="28" Background="#26FFFFFF">
-                            <Border CornerRadius="28">
-                                <Border.Background>
-                                    <ImageBrush ImageSource="{x:Bind Avatar, Mode=OneWay}" Stretch="UniformToFill" />
-                                </Border.Background>
-                            </Border>
-                        </Border>
+                        <Ellipse Stroke="{x:Bind LiveRingBrush, Mode=OneWay}" StrokeThickness="1.5" />
+                        <Ellipse Margin="3" Fill="#26FFFFFF" />
+                        <Ellipse Margin="3">
+                            <Ellipse.Fill>
+                                <ImageBrush ImageSource="{x:Bind Avatar, Mode=OneWay}" Stretch="UniformToFill" />
+                            </Ellipse.Fill>
+                        </Ellipse>
                         <Ellipse Width="14" Height="14" Fill="{StaticResource GlintLiveBrush}" Stroke="#FF1C1C21" StrokeThickness="2"
                                  HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
                                  Visibility="{x:Bind LiveVisibility, Mode=OneWay}" />
@@ -123,16 +127,35 @@
             </DataTemplate>
 
             <DataTemplate x:Key="VodTemplate" x:DataType="local:VodItem">
-                <StackPanel Width="256" Spacing="6" Padding="0,0,0,8">
+                <StackPanel Width="256" Spacing="6" Padding="0,0,0,8" Background="Transparent"
+                            PointerEntered="{x:Bind ShowRemove}" PointerExited="{x:Bind HideRemove}">
                     <Grid CornerRadius="6" Background="#FF26262C" Height="144">
                         <Image Source="{x:Bind Thumbnail}" Stretch="UniformToFill" />
-                        <Border Background="#CC000000" CornerRadius="4" Padding="5,1" Margin="6"
+                        <Border Background="#CC000000" CornerRadius="4" Padding="5,1" Margin="{x:Bind BadgeMargin}"
                                 HorizontalAlignment="Left" VerticalAlignment="Bottom">
-                            <TextBlock Text="{x:Bind Length}" FontSize="12" Foreground="White" />
+                            <TextBlock Text="{x:Bind Length}" FontSize="11" FontFamily="{StaticResource GlintMonoFont}" Foreground="White" />
                         </Border>
+                        <!-- how far you got: inset with rounded ends so the card's corners don't clip it -->
+                        <Grid Height="4" Margin="8,0,8,8" VerticalAlignment="Bottom" CornerRadius="2" Background="#66FFFFFF"
+                              Visibility="{x:Bind ProgressVisibility}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="{x:Bind Watched}" />
+                                <ColumnDefinition Width="{x:Bind Unwatched}" />
+                            </Grid.ColumnDefinitions>
+                            <Border Background="{StaticResource GlintAccentBrush}" CornerRadius="2" />
+                        </Grid>
+                        <Button Visibility="{x:Bind RemoveVisibility, Mode=OneWay}" Click="{x:Bind Remove}"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" Width="28" Height="28" Padding="0"
+                                CornerRadius="14" Background="#C8000000" BorderThickness="0" Foreground="White"
+                                FontFamily="{StaticResource GlintIconFont}" FontSize="11" Content="&#xE711;"
+                                AutomationProperties.Name="Remove from Continue watching" ToolTipService.ToolTip="Remove from Continue watching" />
                     </Grid>
-                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" />
-                    <TextBlock Text="{x:Bind Meta}" FontSize="12" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis" />
+                    <!-- always two lines tall, so cards in a row line up whatever their title length -->
+                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap"
+                               LineHeight="18" LineStackingStrategy="BlockLineHeight" Height="36" />
+                    <TextBlock FontSize="12" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis">
+                        <Run Text="{x:Bind Meta}" /><Run Text="{x:Bind TimeLeft}" FontSize="11" FontFamily="{StaticResource GlintMonoFont}" />
+                    </TextBlock>
                 </StackPanel>
             </DataTemplate>
             <DataTemplate x:Key="StreamCardTemplate" x:DataType="local:StreamCard">
@@ -147,7 +170,7 @@
                         </Border>
                         <Border Background="#CC000000" CornerRadius="4" Padding="6,1" Margin="8"
                                 HorizontalAlignment="Left" VerticalAlignment="Bottom" Visibility="{x:Bind LiveVisibility}">
-                            <TextBlock Text="{x:Bind ViewersText}" FontSize="12" Foreground="White" />
+                            <TextBlock Text="{x:Bind ViewersText}" FontSize="11" FontFamily="{StaticResource GlintMonoFont}" Foreground="White" />
                         </Border>
                     </Grid>
                     </Viewbox>
@@ -156,13 +179,16 @@
                             <ColumnDefinition Width="32" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Width="32" Height="32" CornerRadius="16" Background="#26FFFFFF" VerticalAlignment="Top">
-                            <Border CornerRadius="16">
-                                <Border.Background>
+                        <Grid Width="32" Height="32" VerticalAlignment="Top">
+                            <Ellipse Stroke="{StaticResource GlintLiveBrush}" StrokeThickness="1.5"
+                                     Visibility="{x:Bind LiveVisibility}" />
+                            <Ellipse Margin="3" Fill="#26FFFFFF" />
+                            <Ellipse Margin="3">
+                                <Ellipse.Fill>
                                     <ImageBrush ImageSource="{x:Bind Avatar}" Stretch="UniformToFill" />
-                                </Border.Background>
-                            </Border>
-                        </Border>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                        </Grid>
                         <StackPanel Grid.Column="1" Spacing="1">
                             <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{x:Bind DisplayName}" FontSize="12.5" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis" />
@@ -178,7 +204,7 @@
                         <Image Source="{x:Bind BoxArt}" Stretch="UniformToFill" />
                     </Grid>
                     <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{x:Bind ViewersText}" FontSize="12" Foreground="{StaticResource GlintSubtleTextBrush}" />
+                    <TextBlock Text="{x:Bind ViewersText}" FontSize="11" FontFamily="{StaticResource GlintMonoFont}" Foreground="{StaticResource GlintSubtleTextBrush}" />
                 </StackPanel>
             </DataTemplate>
         </Grid.Resources>
@@ -189,7 +215,7 @@
         </Grid.RowDefinitions>
 
         <!-- title bar: tabs live here, DragRegion is the empty space after them -->
-        <Grid x:Name="TitleBar">
+        <Grid x:Name="TitleBar" Background="{StaticResource GlintBackgroundBrush}" BorderBrush="{StaticResource GlintPanelBorderBrush}" BorderThickness="0,0,0,1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -200,14 +226,104 @@
                 <Button x:Name="SidebarToggle" AutomationProperties.Name="Toggle sidebar" Style="{StaticResource IconButton}" Content="&#xE700;"
                         ToolTipService.ToolTip="Sidebar" />
                 <Image x:Name="BrandLogo" Width="20" Height="20" />
-                <TextBlock Text="Glint" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                <TextBlock Text="GLINT" FontWeight="Bold" FontSize="12" CharacterSpacing="160" VerticalAlignment="Center" />
             </StackPanel>
             <TabView x:Name="Tabs" Grid.Column="1" VerticalAlignment="Center" Margin="4,0,0,0" Padding="0"
-                     IsAddTabButtonVisible="False" TabWidthMode="Equal" CanReorderTabs="True" CanDragTabs="True"
+                     IsAddTabButtonVisible="False" TabWidthMode="SizeToContent" CanReorderTabs="True" CanDragTabs="True" AllowDropTabs="True"
                      CloseButtonOverlayMode="OnPointerOver">
                 <TabView.Resources>
-                    <x:Double x:Key="TabViewItemMaxWidth">220</x:Double>
-                    <x:Double x:Key="TabViewItemMinWidth">120</x:Double>
+                    <SolidColorBrush x:Key="TabViewBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="TabViewBorderBrush" Color="Transparent" />
+                    <Style TargetType="TabViewItem">
+                        <Setter Property="FontFamily" Value="{StaticResource GlintFont}" />
+                        <Setter Property="FontSize" Value="12" />
+                        <Setter Property="UseSystemFocusVisuals" Value="True" />
+                        <Setter Property="MinHeight" Value="32" />
+                        <Setter Property="Height" Value="32" />
+                        <Setter Property="MinWidth" Value="104" />
+                        <Setter Property="MaxWidth" Value="186" />
+                        <Setter Property="Margin" Value="3,0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TabViewItem">
+                                    <Grid x:Name="LayoutRoot" Background="Transparent">
+                                        <VisualStateManager.VisualStateGroups>
+                                            <VisualStateGroup x:Name="CommonStates">
+                                                <VisualState x:Name="Normal" />
+                                                <VisualState x:Name="PointerOver">
+                                                    <VisualState.Setters><Setter Target="Chip.Background" Value="#17171D" /></VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="Pressed">
+                                                    <VisualState.Setters><Setter Target="Chip.Background" Value="#202027" /></VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="Selected">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="Chip.Background" Value="#1B1B22" />
+                                                        <Setter Target="Underline.Opacity" Value="1" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="PointerOverSelected">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="Chip.Background" Value="#23232B" />
+                                                        <Setter Target="Underline.Opacity" Value="1" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="PressedSelected">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="Chip.Background" Value="#23232B" />
+                                                        <Setter Target="Underline.Opacity" Value="1" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                            <VisualStateGroup x:Name="CloseIconStates">
+                                                <VisualState x:Name="CloseButtonVisible" />
+                                                <VisualState x:Name="CloseButtonCollapsed">
+                                                    <VisualState.Setters><Setter Target="CloseButton.Visibility" Value="Collapsed" /></VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                            <VisualStateGroup x:Name="IconStates">
+                                                <VisualState x:Name="Icon" />
+                                                <VisualState x:Name="NoIcon">
+                                                    <VisualState.Setters><Setter Target="IconBox.Visibility" Value="Collapsed" /></VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                            <VisualStateGroup x:Name="DragStates">
+                                                <VisualState x:Name="NotDragging" />
+                                                <VisualState x:Name="Dragging">
+                                                    <VisualState.Setters><Setter Target="LayoutRoot.Opacity" Value="0.5" /></VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="ReorderedPlaceholder">
+                                                    <VisualState.Setters><Setter Target="LayoutRoot.Opacity" Value="0" /></VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                            <VisualStateGroup x:Name="DisabledStates">
+                                                <VisualState x:Name="Enabled" />
+                                                <VisualState x:Name="Disabled">
+                                                    <VisualState.Setters><Setter Target="LayoutRoot.Opacity" Value="0.4" /></VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                        </VisualStateManager.VisualStateGroups>
+                                        <Border x:Name="Chip" CornerRadius="8" Background="Transparent" Control.IsTemplateFocusTarget="True">
+                                            <Grid Padding="10,0,4,0" ColumnSpacing="2">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <Viewbox x:Name="IconBox" Width="14" Height="14" Margin="0,0,6,0">
+                                                    <ContentControl x:Name="IconControl" IsTabStop="False" Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TabViewTemplateSettings.IconElement}" />
+                                                </Viewbox>
+                                                <ContentPresenter x:Name="ContentPresenter" Grid.Column="1" Content="" ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                                                  FontFamily="{TemplateBinding FontFamily}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch" />
+                                                <Button x:Name="CloseButton" Grid.Column="2" Content="&#xE711;" FontFamily="{StaticResource GlintIconFont}"
+                                                        FontSize="10" Width="22" Height="24" MinWidth="0" MinHeight="0" Padding="0" Background="Transparent"
+                                                        BorderThickness="0" IsTabStop="False" AutomationProperties.Name="Close tab" />
+                                            </Grid>
+                                        </Border>
+                                        <Border x:Name="Underline" Height="2" Margin="12,0,12,0" CornerRadius="1" VerticalAlignment="Bottom"
+                                                Background="{StaticResource GlintAccentBrush}" Opacity="0" IsHitTestVisible="False" />
+                                    </Grid>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
                 </TabView.Resources>
                 <TabView.TabStripFooter>
                     <Grid>
@@ -234,7 +350,7 @@
                 <ColumnDefinition x:Name="ChatCol" Width="360" />
             </Grid.ColumnDefinitions>
 
-            <Grid x:Name="Sidebar" Padding="8,2,6,8" RowSpacing="6">
+            <Grid x:Name="Sidebar" Padding="8,2,6,8" RowSpacing="6" BorderBrush="{StaticResource GlintPanelBorderBrush}" BorderThickness="0,0,1,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -269,7 +385,7 @@
                 </Button>
                 </StackPanel>
                 <TextBlock x:Name="SidebarHeader" Grid.Row="1" Text="CHANNELS" FontSize="11" FontWeight="SemiBold"
-                           CharacterSpacing="60" Foreground="{StaticResource GlintSubtleTextBrush}" Margin="4,6,0,0" />
+                           CharacterSpacing="140" Foreground="{StaticResource GlintSubtleTextBrush}" Margin="10,14,0,4" />
                 <ListView x:Name="ChannelList" Grid.Row="2" SelectionMode="None" IsItemClickEnabled="True"
                           ScrollViewer.VerticalScrollMode="Enabled" ScrollViewer.VerticalScrollBarVisibility="Hidden"
                           ItemTemplate="{StaticResource ChannelExpanded}" Padding="0" Margin="-4,0,-4,0">
@@ -284,7 +400,8 @@
                 <TextBlock x:Name="SidebarEmpty" Grid.Row="2" TextWrapping="Wrap" FontSize="12.5" Margin="4,4,4,0"
                            Foreground="{StaticResource GlintSubtleTextBrush}"
                            Text="Nothing here yet. Add a channel above, or log in to pull in the people you follow." />
-                <Grid x:Name="SidebarFooter" Grid.Row="3" ColumnSpacing="4" RowSpacing="2">
+                <Grid x:Name="SidebarFooter" Grid.Row="3" ColumnSpacing="4" RowSpacing="2" Padding="0,8,0,0"
+                      BorderBrush="{StaticResource GlintPanelBorderBrush}" BorderThickness="0,1,0,0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -336,7 +453,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- mpv's native window sits on top of this, so anything drawn here only shows while it's hidden -->
-                <Grid x:Name="VideoArea" Background="Black" CornerRadius="8,0,0,0">
+                <Grid x:Name="VideoArea" Background="Black">
                     <StackPanel x:Name="VideoStatus" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
                         <ProgressRing x:Name="VideoSpinner" Width="40" Height="40" IsActive="False" />
                         <Border x:Name="OfflineAvatar" Width="88" Height="88" CornerRadius="44" Visibility="Collapsed" Opacity="0.85">
@@ -355,7 +472,8 @@
 
                 </Grid>
 
-                <Grid x:Name="InfoBar" Grid.Row="1" Padding="14,10,10,10" ColumnSpacing="12">
+                <Grid x:Name="InfoBar" Grid.Row="1" Padding="18,12,12,14" ColumnSpacing="12"
+                      BorderBrush="{StaticResource GlintPanelBorderBrush}" BorderThickness="0,2,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -365,20 +483,19 @@
                             AutomationProperties.Name="View channel" ToolTipService.ToolTip="View channel">
                     <Grid Width="44" Height="44">
                         <Ellipse x:Name="InfoLiveRing" Stroke="{StaticResource GlintLiveBrush}" StrokeThickness="2" Visibility="Collapsed" />
-                        <Border Width="38" Height="38" CornerRadius="19" Background="#26FFFFFF">
-                            <Border CornerRadius="19">
-                                <Border.Background>
-                                    <ImageBrush x:Name="InfoAvatar" Stretch="UniformToFill" />
-                                </Border.Background>
-                            </Border>
-                        </Border>
+                        <Ellipse Margin="3" Fill="#26FFFFFF" />
+                        <Ellipse Margin="3">
+                            <Ellipse.Fill>
+                                <ImageBrush x:Name="InfoAvatar" Stretch="UniformToFill" />
+                            </Ellipse.Fill>
+                        </Ellipse>
                     </Grid>
                     </Button>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <HyperlinkButton x:Name="InfoNameButton" Padding="0" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                              AutomationProperties.Name="View channel" ToolTipService.ToolTip="View channel">
-                                <TextBlock x:Name="InfoName" FontWeight="SemiBold" FontSize="15" />
+                                <TextBlock x:Name="InfoName" FontWeight="Bold" FontSize="16" />
                             </HyperlinkButton>
                             <Border x:Name="LiveBadge" Background="{StaticResource GlintLiveBrush}" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" Visibility="Collapsed">
                                 <TextBlock Text="LIVE" FontSize="10" FontWeight="Bold" Foreground="White" />
@@ -386,9 +503,15 @@
                             <Border x:Name="VodBadge" Background="#FF3A3A44" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" Visibility="Collapsed">
                                 <TextBlock x:Name="VodBadgeText" Text="VOD" FontSize="10" FontWeight="Bold" Foreground="White" />
                             </Border>
+                            <Border x:Name="MutedBadge" Background="#FFB83232" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" Visibility="Collapsed"
+                                    ToolTipService.ToolTip="Twitch muted this part for copyrighted audio">
+                                <TextBlock x:Name="MutedBadgeText" FontSize="10" FontWeight="Bold" Foreground="White" />
+                            </Border>
                         </StackPanel>
                         <TextBlock x:Name="InfoTitle" FontSize="13" TextTrimming="CharacterEllipsis" />
-                        <TextBlock x:Name="InfoMeta" FontSize="12" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock FontSize="12" Foreground="{StaticResource GlintSubtleTextBrush}" TextTrimming="CharacterEllipsis">
+                            <Run x:Name="InfoMeta" FontSize="11" FontFamily="{StaticResource GlintMonoFont}" /><Run x:Name="InfoGame" />
+                        </TextBlock>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                         <Button x:Name="GoLiveButton" AutomationProperties.Name="Back to live" Content="Back to live" Visibility="Collapsed" Margin="0,0,6,0" />
@@ -412,7 +535,7 @@
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <Grid Padding="14,8,6,8" BorderBrush="{StaticResource GlintPanelBorderBrush}" BorderThickness="0,0,0,1">
+                <Grid Padding="14,7,6,7" BorderBrush="{StaticResource GlintPanelBorderBrush}" BorderThickness="0,0,0,1">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -420,17 +543,17 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Ellipse x:Name="ConnectionDot" Width="7" Height="7" Fill="#FF6B6B76" />
-                        <TextBlock x:Name="ChatHeader" Text="Chat" FontWeight="SemiBold" FontSize="13" />
+                        <TextBlock x:Name="ChatHeader" Text="CHAT" FontWeight="SemiBold" FontSize="10" CharacterSpacing="140" Foreground="{StaticResource GlintSubtleTextBrush}" />
                     </StackPanel>
                     <Grid x:Name="ChatActionsHost" Grid.Column="1">
                         <StackPanel x:Name="ChatHeaderActions" Orientation="Horizontal" Spacing="2">
                             <Button x:Name="MentionsButton" Style="{StaticResource IconButton}" Width="30" Height="28"
                                     AutomationProperties.Name="Mentions" ToolTipService.ToolTip="Mentions history">
                                 <Grid>
-                                    <TextBlock Text="@" FontFamily="Segoe UI Variable Text" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="@" FontFamily="{StaticResource GlintFont}" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                     <Border x:Name="MentionsBadge" Background="{StaticResource GlintLiveBrush}" CornerRadius="7" MinWidth="14" Height="14" Padding="3,0"
                                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-7,-9,0" Visibility="Collapsed">
-                                        <TextBlock x:Name="MentionsCount" FontFamily="Segoe UI Variable Text" FontSize="9.5" FontWeight="Bold" Foreground="White"
+                                        <TextBlock x:Name="MentionsCount" FontFamily="{StaticResource GlintFont}" FontSize="9.5" FontWeight="Bold" Foreground="White"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                 </Grid>
@@ -445,10 +568,10 @@
                 <chat:ChatView x:Name="Chat" Grid.Row="1" />
                 <!-- active prediction or poll, floating over the top of chat like twitch.tv -->
                 <Border x:Name="EngageCard" Grid.Row="1" VerticalAlignment="Top" Margin="8,8,8,0" Padding="12,10,8,12" CornerRadius="8"
-                        Background="#FF24242B" BorderBrush="#26FFFFFF" BorderThickness="1" Visibility="Collapsed">
+                        Background="{StaticResource GlintPanelBrush}" BorderBrush="{StaticResource GlintPanelBorderBrush}" BorderThickness="1" Visibility="Collapsed">
                     <StackPanel x:Name="EngageContent" Spacing="8" />
                 </Border>
-                <Grid x:Name="ChatInputHost" Grid.Row="2" Padding="10,6,10,10">
+                <Grid x:Name="ChatInputHost" Grid.Row="2" Padding="12,8,12,12" BorderBrush="{StaticResource GlintPanelBorderBrush}" BorderThickness="0,1,0,0">
                     <!-- moved as one piece between here and the multiview composer -->
                     <Grid x:Name="Composer" RowSpacing="4">
                         <Grid.RowDefinitions>
@@ -465,13 +588,14 @@
                             <Button x:Name="ReplyBarClose" Grid.Column="1" Style="{StaticResource IconButton}" Width="26" Height="24" FontSize="10"
                                     Content="&#xE711;" AutomationProperties.Name="Cancel reply" ToolTipService.ToolTip="Cancel reply (Esc)" />
                         </Grid>
-                        <Grid Grid.Row="1" ColumnSpacing="2">
+                        <Grid Grid.Row="1" ColumnSpacing="4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="ChatInput" PlaceholderText="Send a message" MaxLength="500" TextWrapping="Wrap" AcceptsReturn="False" />
-                            <Button x:Name="EmoteButton" Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE76E;" VerticalAlignment="Bottom"
+                            <TextBox x:Name="ChatInput" PlaceholderText="Send a message" MaxLength="500" TextWrapping="Wrap" AcceptsReturn="False"
+                                     CornerRadius="18" Padding="14,6,14,6" FontSize="13" FontFamily="{StaticResource GlintFont}" Background="#17171C" BorderThickness="1" />
+                            <Button x:Name="EmoteButton" Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE76E;" VerticalAlignment="Bottom" Width="32" Height="32" CornerRadius="16"
                                     AutomationProperties.Name="Emotes" ToolTipService.ToolTip="Emotes" />
                         </Grid>
                     </Grid>
@@ -499,7 +623,7 @@
                                         <StackPanel Width="270" Spacing="12">
                                             <ComboBox x:Name="MultiviewChatMode" Header="Chats" HorizontalAlignment="Stretch" AutomationProperties.Name="Multiview chats" />
                                             <ComboBox x:Name="MultiviewDock" Header="Chat position" HorizontalAlignment="Stretch" AutomationProperties.Name="Chat position" />
-                                            <Button x:Name="MultiviewPins" Content="Choose pinned chats" HorizontalAlignment="Stretch" AutomationProperties.Name="Choose pinned chats" />
+                                            <Button x:Name="MultiviewPins" Content="Choose which chats show" HorizontalAlignment="Stretch" AutomationProperties.Name="Choose which chats show" />
                                             <Slider x:Name="MultiviewChatWidth" Header="Chat width" Minimum="260" Maximum="600" StepFrequency="10" AutomationProperties.Name="Multiview chat width" />
                                             <Slider x:Name="MultiviewChatHeight" Header="Chat height" Minimum="140" Maximum="700" StepFrequency="10" AutomationProperties.Name="Multiview chat height" />
                                         </StackPanel>
@@ -642,33 +766,54 @@
                            Foreground="{StaticResource GlintSubtleTextBrush}" />
             </Grid>
 
-            <Grid x:Name="EmptyState" Grid.Column="1" Grid.ColumnSpan="3" Background="#80101014" CornerRadius="8,0,0,0">
+            <Grid x:Name="EmptyState" Grid.Column="1" Grid.ColumnSpan="3" Background="{StaticResource GlintBackgroundBrush}">
                 <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="HomePanel" Padding="24,0,8,24" Spacing="12" VerticalAlignment="Center">
-                        <StackPanel x:Name="HomeIntro" HorizontalAlignment="Center" Spacing="12" MaxWidth="340" Margin="0,24,0,12">
+                    <StackPanel x:Name="HomePanel" Padding="32,0,16,32" Spacing="24" VerticalAlignment="Center">
+                        <StackPanel x:Name="HomeIntro" HorizontalAlignment="Center" Spacing="10" Width="300" Margin="0,24,0,12">
                             <Image x:Name="EmptyLogo" Width="80" Height="80" Margin="0,0,0,6" />
-                            <TextBlock Text="What are we watching?" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock x:Name="HomeTitle" Text="What are we watching?" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center" />
                             <TextBlock x:Name="HomeSubtitle" Text="Choose a stream from the sidebar, browse, or enter a channel." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource GlintSubtleTextBrush}" />
                             <TextBox x:Name="EmptyAddBox" PlaceholderText="Channel name or twitch.tv link" Margin="0,4,0,0" />
                             <Button x:Name="EmptyBrowseButton" Content="Browse live channels" HorizontalAlignment="Center" />
-                            <TextBlock Text="Ctrl+T new tab, Ctrl+W close tab"
+                            <TextBlock x:Name="HomeShortcuts" Text="Ctrl+T new tab, Ctrl+W close tab"
                                        FontSize="12" TextAlignment="Center" Foreground="{StaticResource GlintSubtleTextBrush}" Opacity="0.8" />
                         </StackPanel>
-                        <TextBlock x:Name="HomeLiveHeader" Text="Live now" FontSize="18" FontWeight="SemiBold" Visibility="Collapsed" />
-                        <GridView x:Name="HomeLiveGrid" SelectionMode="None" IsItemClickEnabled="True" Visibility="Collapsed"
-                                  ItemTemplate="{StaticResource StreamCardTemplate}"
-                                  ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" />
-                        <TextBlock x:Name="HomeLiveEmpty" Text="None of your channels are live right now." Visibility="Collapsed"
-                                   Foreground="{StaticResource GlintSubtleTextBrush}" Margin="0,0,0,12" />
-                        <TextBlock x:Name="HomeRecentHeader" Text="Recently watched" FontSize="18" FontWeight="SemiBold" Visibility="Collapsed" />
-                        <GridView x:Name="HomeRecentGrid" SelectionMode="None" IsItemClickEnabled="True" Visibility="Collapsed"
-                                  ItemTemplate="{StaticResource RecentChannelTemplate}"
-                                  ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" />
+                        <!-- the sections below are put in the order chosen in Settings > Home -->
+                        <StackPanel x:Name="HomeLiveSection" Spacing="12" Visibility="Collapsed">
+                            <Grid>
+                                <TextBlock Text="LIVE NOW" FontSize="11" CharacterSpacing="160" FontWeight="SemiBold" Foreground="{StaticResource GlintSubtleTextBrush}" VerticalAlignment="Center" />
+                                <Button x:Name="HomeLiveMore" HorizontalAlignment="Right" Margin="0,0,16,0" Visibility="Collapsed" />
+                            </Grid>
+                            <GridView x:Name="HomeLiveGrid" SelectionMode="None" IsItemClickEnabled="True" Visibility="Collapsed"
+                                      ItemTemplate="{StaticResource StreamCardTemplate}"
+                                      ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" />
+                            <TextBlock x:Name="HomeLiveEmpty" Text="None of your channels are live right now." Visibility="Collapsed"
+                                       Foreground="{StaticResource GlintSubtleTextBrush}" Margin="0,0,0,12" />
+                        </StackPanel>
+                        <StackPanel x:Name="HomeResumeSection" Spacing="12" Visibility="Collapsed">
+                            <TextBlock Text="CONTINUE WATCHING" FontSize="11" CharacterSpacing="160" FontWeight="SemiBold" Foreground="{StaticResource GlintSubtleTextBrush}" />
+                            <GridView x:Name="HomeResumeGrid" SelectionMode="None" IsItemClickEnabled="True"
+                                      ItemTemplate="{StaticResource VodTemplate}" Margin="0,0,0,8"
+                                      ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" />
+                        </StackPanel>
+                        <StackPanel x:Name="HomeRecentSection" Spacing="12" Visibility="Collapsed">
+                            <TextBlock Text="RECENTLY WATCHED" FontSize="11" CharacterSpacing="160" FontWeight="SemiBold" Foreground="{StaticResource GlintSubtleTextBrush}" />
+                            <GridView x:Name="HomeRecentGrid" SelectionMode="None" IsItemClickEnabled="True"
+                                      ItemTemplate="{StaticResource RecentChannelTemplate}"
+                                      ScrollViewer.VerticalScrollMode="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
+                <Button x:Name="HomeCustomise" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,24,0"
+                        AutomationProperties.Name="Customise home" ToolTipService.ToolTip="Choose and reorder what the home page shows">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE771;" FontSize="14" />
+                        <TextBlock Text="Customise" />
+                    </StackPanel>
+                </Button>
             </Grid>
 
-            <Grid x:Name="BrowsePage" Grid.Column="1" Grid.ColumnSpan="3" Visibility="Collapsed" Background="#FF0F0F12" Padding="24,14,8,0" RowSpacing="14">
+            <Grid x:Name="BrowsePage" Grid.Column="1" Grid.ColumnSpan="3" Visibility="Collapsed" Background="{StaticResource GlintBackgroundBrush}" Padding="24,14,8,0" RowSpacing="14">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />

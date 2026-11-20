@@ -70,8 +70,7 @@ public sealed partial class MainWindow
                 _dispatcher.TryEnqueue(() =>
                 {
                     if (_closing) return;
-                    if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } p) p.Restore();
-                    Activate();
+                    ShowFromTray(); // also restores from the taskbar
                     OpenChannel(login, true);
                 });
             };

@@ -15,8 +15,8 @@ public sealed partial class SettingsWindow
     readonly List<(string Section, string Search, FrameworkElement Element)> _rows = new();
     readonly StackPanel _settingsContent = new() { Spacing = 8 };
     readonly ListView _categories = new() { SelectionMode = ListViewSelectionMode.Single, IsItemClickEnabled = true };
-    readonly TextBox _search = new() { PlaceholderText = "Search settings" };
-    readonly TextBlock _sectionTitle = new() { FontSize = 22, FontWeight = FontWeights.SemiBold };
+    readonly TextBox _search = new() { PlaceholderText = "Search settings", CornerRadius = new CornerRadius(16), Padding = new Thickness(14, 7, 14, 7) };
+    readonly TextBlock _sectionTitle = new() { FontSize = 11, CharacterSpacing = 160, FontWeight = FontWeights.SemiBold };
     readonly TextBlock _feedback = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap };
     readonly Button _reset = new() { Content = "Reset this section" };
     ScrollViewer _settingsScroll = null!;
@@ -24,7 +24,8 @@ public sealed partial class SettingsWindow
 
     void BuildShell()
     {
-        var page = new Grid { RequestedTheme = ElementTheme.Dark, Padding = new Thickness(24), RowSpacing = 16,
+        var page = new Grid { RequestedTheme = ElementTheme.Dark, KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden,
+            Padding = new Thickness(24), RowSpacing = 16,
             Background = (Brush)Application.Current.Resources["GlintBackgroundBrush"] };
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -32,16 +33,17 @@ public sealed partial class SettingsWindow
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var heading = new StackPanel { Spacing = 4 };
         heading.Children.Add(new TextBlock { Text = "Settings", FontSize = 26, FontWeight = FontWeights.SemiBold });
-        heading.Children.Add(Note("Changes save automatically. Adjust a setting and see it in Glint as you go."));
         page.Children.Add(heading);
         AutomationProperties.SetName(_search, "Search settings");
         Grid.SetRow(_search, 1); page.Children.Add(_search);
         var body = new Grid { ColumnSpacing = 24 };
         body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(155) });
         body.ColumnDefinitions.Add(new ColumnDefinition());
-        _categories.ItemsSource = new[] { "Account", "Appearance", "Chat", "Filtering", "Player", "Multiview", "Notifications", "Shortcuts", "Profiles", "General", "About" };
+        _categories.ItemsSource = new[] { "Account", "Appearance", "Home", "Chat", "Filtering", "Player", "Multiview", "Notifications", "Shortcuts", "Profiles", "General", "About" };
         AutomationProperties.SetName(_categories, "Settings categories");
-        body.Children.Add(_categories);
+        var navigation = new Border { Child = _categories, BorderThickness = new Thickness(0, 0, 1, 0),
+            BorderBrush = (Brush)Application.Current.Resources["GlintPanelBorderBrush"], Padding = new Thickness(0, 0, 12, 0) };
+        body.Children.Add(navigation);
         var content = new Grid { RowSpacing = 14 };
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition());
@@ -52,7 +54,8 @@ public sealed partial class SettingsWindow
         Grid.SetRow(_settingsScroll, 1); content.Children.Add(_settingsScroll);
         Grid.SetColumn(content, 1); body.Children.Add(content);
         Grid.SetRow(body, 2); page.Children.Add(body);
-        var footer = new Grid { ColumnSpacing = 12 };
+        var footer = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 16, 0, 0), BorderThickness = new Thickness(0, 1, 0, 0),
+            BorderBrush = (Brush)Application.Current.Resources["GlintPanelBorderBrush"] };
         footer.ColumnDefinitions.Add(new ColumnDefinition());
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -81,6 +84,12 @@ public sealed partial class SettingsWindow
             await RestoreDefaultsAsync(section);
         };
         _categories.SelectedItem = "Account";
+    }
+
+    public void ShowCategory(string category)
+    {
+        _search.Text = "";
+        _categories.SelectedItem = category;
     }
 
     async Task RestoreDefaultsAsync(string? section = null)
@@ -134,7 +143,7 @@ public sealed partial class SettingsWindow
         _settingsContent.Children.Clear();
         string section = _categories.SelectedItem as string ?? "Account";
         string query = _search.Text.Trim();
-        _sectionTitle.Text = query.Length == 0 ? section : "Search results";
+        _sectionTitle.Text = query.Length == 0 ? section.ToUpperInvariant() : "SEARCH RESULTS";
         _reset.Visibility = query.Length == 0 && PreferenceCatalog.Sections.ContainsKey(section) ? Visibility.Visible : Visibility.Collapsed;
         string? previous = null;
         var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -198,7 +207,7 @@ public sealed partial class SettingsWindow
             Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { swatch, new TextBlock { Text = "Choose colour" } } },
         };
         AutomationProperties.SetName(button, "Choose custom accent colour");
-        return Row("Custom colour", "Pick any colour for buttons, highlights and the live ring", button);
+        return Row("Custom colour", "Pick any colour for buttons, highlights and the player strip", button);
     }
 
     Border Choice(string title, string? description, IEnumerable<string> choices, string value, Action<string> set)
@@ -245,7 +254,7 @@ public sealed partial class SettingsWindow
                 line.ColumnDefinitions.Add(new ColumnDefinition());
                 line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 line.Children.Add(new TextBlock { Text = word, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
-                var remove = new Button { Content = new SymbolIcon(Symbol.Cancel), Padding = new Thickness(6), MinHeight = 28, MinWidth = 28 };
+                var remove = new Button { Content = new FontIcon { Glyph = "\uE711" }, Padding = new Thickness(6), MinHeight = 28, MinWidth = 28 };
                 AutomationProperties.SetName(remove, $"Remove {word} from {title.ToLowerInvariant()}");
                 remove.Click += (_, _) => { list.Remove(word); set(list.ToList()); Settings.Save(); Refresh(); };
                 Grid.SetColumn(remove, 1); line.Children.Add(remove); entries.Children.Add(line);
@@ -276,7 +285,7 @@ public sealed partial class SettingsWindow
         _rows.Clear();
         BuildAccount();
         AddOption("Account", "Twitch login sign in clips watch time", _account);
-        BuildAppearancePage(); BuildChatPage(); BuildFilteringPage(); BuildPlayerPage();
+        BuildAppearancePage(); BuildHomePage(); BuildChatPage(); BuildFilteringPage(); BuildPlayerPage();
         BuildMultiviewPage(); BuildNotificationsPage(); BuildShortcutsPage();
         AddOption("Profiles", "save restore named preferences setup", ProfilesCard(false));
         string[] startup = ["Reopen live channels", "Reopen all tabs", "Start on the home page"];
@@ -284,6 +293,12 @@ public sealed partial class SettingsWindow
         AddOption("General", "startup launch open restore previous session tabs home fresh", Choice("When Glint opens",
             "Live channels skips tabs whose stream is offline", startup, startup[Math.Max(0, Array.IndexOf(startupValues, S.StartupTabs))],
             v => S.StartupTabs = startupValues[Array.IndexOf(startup, v)]));
+        AddOption("General", "start windows startup sign in login boot background go live alerts notifications", ToggleRow("Start Glint when you sign in to Windows",
+            "Opens minimised in the background so go-live alerts reach you. Nothing opens or plays until you open Glint",
+            WindowsStartup.IsOn, WindowsStartup.Set));
+        AddOption("General", "tray notification area close minimise background keep running quit", ToggleRow("Keep running in the tray when closed",
+            "Closing the window hides Glint next to the clock so go-live alerts keep working. Right-click the tray icon to quit",
+            S.CloseToTray, v => { S.CloseToTray = v; _window.UpdateTrayIcon(); }));
         var restore = new Button { Content = "Restore all defaults" };
         AutomationProperties.SetName(restore, "Restore all defaults");
         restore.Click += async (_, _) => await RestoreDefaultsAsync();
@@ -319,6 +334,62 @@ public sealed partial class SettingsWindow
             S.SidebarSort, v => { S.SidebarSort = v; _window.ApplyAppearance(); }));
         Add("thumbnail card size home browse", Choice("Thumbnail size", "Stream cards on Home and Browse", ["Small", "Medium", "Large"],
             S.CardSize, v => { S.CardSize = v; _window.ApplyAppearance(); }));
+    }
+
+    void BuildHomePage()
+    {
+        void Add(string text, FrameworkElement row) => AddOption("Home", text, row);
+        Add("home page sections order show hide continue watching live now recently watched", HomeSectionsCard());
+        string[] rows = ["1 row", "2 rows", "3 rows", "All"];
+        Add("home live now rows how many channels show all", Choice("Live now", "How many rows of live channels to show before \"Show all\"",
+            rows, S.HomeLiveRows is >= 1 and <= 3 ? rows[S.HomeLiveRows - 1] : "All",
+            v => { S.HomeLiveRows = v == "All" ? 0 : Array.IndexOf(rows, v) + 1; _window.ApplyHomePreferences(); }));
+    }
+
+    // The home page's sections, in order, each with a switch and buttons to move it up or down.
+    Border HomeSectionsCard()
+    {
+        var names = new Dictionary<string, string> { ["Continue"] = "Continue watching", ["Live"] = "Live now", ["Recent"] = "Recently watched" };
+        var panel = new StackPanel { Spacing = 6 };
+        panel.Children.Add(new TextBlock { Text = "Sections", FontSize = 14 });
+        panel.Children.Add(Note("Choose what the home page shows and in what order."));
+        var order = S.HomeSections.Where(names.ContainsKey).Concat(names.Keys).Distinct().ToList();
+        for (int i = 0; i < order.Count; i++)
+        {
+            var key = order[i];
+            var row = new Grid { ColumnSpacing = 4, Margin = new Thickness(0, 2, 0, 0) };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            for (int c = 0; c < 3; c++) row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(new TextBlock { Text = names[key], VerticalAlignment = VerticalAlignment.Center });
+            var show = new ToggleSwitch { IsOn = !S.HomeHiddenSections.Contains(key), OnContent = "", OffContent = "", MinWidth = 0 };
+            AutomationProperties.SetName(show, $"Show {names[key]}");
+            show.Toggled += (_, _) =>
+            {
+                S.HomeHiddenSections.Remove(key);
+                if (!show.IsOn) S.HomeHiddenSections.Add(key);
+                _window.ApplyHomePreferences();
+            };
+            Grid.SetColumn(show, 1);
+            row.Children.Add(show);
+            int index = i;
+            foreach (var (glyph, step, column, label) in new[] { ("", -1, 2, "Move up"), ("", 1, 3, "Move down") })
+            {
+                var move = new Button { Content = new FontIcon { Glyph = glyph, FontSize = 12 }, Padding = new Thickness(8, 6, 8, 6),
+                    IsEnabled = index + step >= 0 && index + step < order.Count };
+                AutomationProperties.SetName(move, $"{label}: {names[key]}");
+                move.Click += (_, _) =>
+                {
+                    (order[index], order[index + step]) = (order[index + step], order[index]);
+                    S.HomeSections = order.ToList();
+                    _window.ApplyHomePreferences();
+                    BuildRows(); RenderRows();
+                };
+                Grid.SetColumn(move, column);
+                row.Children.Add(move);
+            }
+            panel.Children.Add(row);
+        }
+        return Card(panel);
     }
 
     void BuildChatPage()
@@ -378,6 +449,10 @@ public sealed partial class SettingsWindow
         Add("default new tab volume", Number("New tab volume", "Used when the option above is off", 0, 100, 1, S.NewTabVolume, v => S.NewTabVolume = v, "%"));
         Add("seek distance skip seconds", Number("Seek distance", "Player skip buttons and seek shortcuts", 5, 60, 5, S.SeekSeconds, v => { S.SeekSeconds = v; _window.ApplyPlayerPreferences(); }, " s"));
         Add("long seek distance shift arrows", Number("Long seek distance", "Long seek shortcuts; Shift + arrows by default", 15, 300, 15, S.LongSeekSeconds, v => S.LongSeekSeconds = v, " s"));
+        Add("skip muted parts copyright audio vod past broadcasts", ToggleRow("Skip muted parts of past broadcasts",
+            "Jumps past sections Twitch muted for copyrighted audio. Otherwise they're marked on the seek bar with a countdown and a Skip button", S.SkipMutedVod, v => S.SkipMutedVod = v));
+        Add("follow raids raid automatically switch channel", ToggleRow("Follow raids automatically",
+            "When the channel you're watching raids someone, switch to them after a short countdown. Otherwise Glint asks", S.FollowRaids, v => S.FollowRaids = v));
         Add("controls hide delay overlay", Number("Hide controls after", "While playing and the pointer is away from controls", 1, 10, 0.5, S.ControlsHideSeconds, v => { S.ControlsHideSeconds = v; _window.ApplyPlayerPreferences(); }, " s"));
         Add("low latency live delay", ToggleRow("Low latency", "Applies to streams opened afterwards", S.LowLatency, v => S.LowLatency = v));
         Add("skip ads", ToggleRow("Skip ads", "Tries another stream during detected ad breaks, otherwise waits for the broadcast to return. Some commercial-break screens may still get through. Reloads open live streams.",
@@ -389,7 +464,9 @@ public sealed partial class SettingsWindow
         void Add(string text, FrameworkElement row) => AddOption("Multiview", text, row);
         Add("stream count two three four", Choice("Number of streams", null, ["2", "3", "4"], S.MultiviewCount.ToString(), v => { S.MultiviewCount = int.Parse(v); _window.ApplyMultiviewPreferences(); }));
         Add("layout grid main stream", Choice("Video layout", null, ["Grid", "Main stream"], S.MultiviewLayout, v => { S.MultiviewLayout = v; _window.ApplyMultiviewPreferences(); }));
-        Add("chat each following pinned hidden", Choice("Chats", null, ["Each stream", "Following chat", "Pinned chats", "Hidden"], S.MultiviewChats, v => { S.MultiviewChats = v; _window.ApplyMultiviewPreferences(); }));
+        Add("chats each every stream following current chosen pinned hidden none", Choice("Chats", "Which streams' chats show under the videos",
+            MainWindow.ChatModes.Select(m => m.Label), MainWindow.ChatModeLabel(S.MultiviewChats),
+            v => { S.MultiviewChats = MainWindow.ChatModeValue(v); _window.ApplyMultiviewPreferences(); }));
         Add("chat placement below right auto", Choice("Chat placement", null, ["Below", "Right", "Auto"], S.MultiviewDock, v => { S.MultiviewDock = v; _window.ApplyMultiviewPreferences(); }));
         Add("chat width", Number("Chat width", "When placed beside video", 260, 600, 10, S.MultiviewChatWidth, v => { S.MultiviewChatWidth = v; _window.ApplyMultiviewPreferences(); }, " px"));
         Add("chat height", Number("Chat height", "When placed below video", 140, 700, 10, S.MultiviewChatHeight, v => { S.MultiviewChatHeight = v; _window.ApplyMultiviewPreferences(); }, " px"));
@@ -419,7 +496,7 @@ public sealed partial class SettingsWindow
         var box = new ComboBox { ItemsSource = NotificationSound.Tones, SelectedItem = tone, Width = 125 };
         AutomationProperties.SetName(box, title);
         box.SelectionChanged += (_, _) => { if (!_building && box.SelectedItem is string selected) { set(selected); Settings.Save(); } };
-        var play = new Button { Content = new SymbolIcon(Symbol.Play), Padding = new Thickness(9) };
+        var play = new Button { Content = new FontIcon { Glyph = "\uE768" }, Padding = new Thickness(9) };
         AutomationProperties.SetName(play, "Preview " + title.ToLowerInvariant());
         play.Click += (_, _) => { if (box.SelectedItem is string selected) NotificationSound.Play(selected, preview: true); };
         panel.Children.Add(box); panel.Children.Add(play);

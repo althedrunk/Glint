@@ -48,18 +48,18 @@ public sealed partial class MainWindow
         _multiviewUpdating = true;
         MultiviewCount.ItemsSource = new[] { "2 streams", "3 streams", "4 streams" };
         MultiviewLayout.ItemsSource = new[] { "Grid", "Main stream" };
-        MultiviewChatMode.ItemsSource = new[] { "Each stream", "Following chat", "Pinned chats", "Hidden" };
+        MultiviewChatMode.ItemsSource = ChatModes.Select(m => m.Label).ToList();
         MultiviewDock.ItemsSource = new[] { "Below", "Right", "Auto" };
         S.MultiviewCount = Math.Clamp(S.MultiviewCount, 2, 4);
         MultiviewCount.SelectedIndex = S.MultiviewCount - 2;
         MultiviewLayout.SelectedItem = S.MultiviewLayout;
         if (MultiviewLayout.SelectedIndex < 0) MultiviewLayout.SelectedIndex = 0;
-        MultiviewChatMode.SelectedItem = S.MultiviewChats;
+        MultiviewChatMode.SelectedItem = ChatModeLabel(S.MultiviewChats);
         if (MultiviewChatMode.SelectedIndex < 0) MultiviewChatMode.SelectedIndex = 0;
         MultiviewDock.SelectedItem = S.MultiviewDock;
         if (MultiviewDock.SelectedIndex < 0) MultiviewDock.SelectedIndex = 0;
         S.MultiviewLayout = (string)MultiviewLayout.SelectedItem;
-        S.MultiviewChats = (string)MultiviewChatMode.SelectedItem;
+        S.MultiviewChats = ChatModeValue((string)MultiviewChatMode.SelectedItem);
         S.MultiviewDock = (string)MultiviewDock.SelectedItem;
         MultiviewChatWidth.Value = Math.Clamp(S.MultiviewChatWidth, 260, 600);
         MultiviewChatHeight.Value = Math.Clamp(S.MultiviewChatHeight, 140, 700);
@@ -92,7 +92,7 @@ public sealed partial class MainWindow
         MultiviewChatMode.SelectionChanged += (_, _) =>
         {
             if (_multiviewUpdating) return;
-            S.MultiviewChats = (string)MultiviewChatMode.SelectedItem;
+            S.MultiviewChats = ChatModeValue((string)MultiviewChatMode.SelectedItem);
             Settings.Save();
             ApplyMultiviewLayout();
         };
@@ -503,11 +503,11 @@ public sealed partial class MainWindow
     {
         if (_multiviewChats.TryGetValue(tab, out var existing)) return existing;
         var pane = new MultiviewChatPane { Tab = tab };
-        pane.Root.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 28, 28, 33));
+        pane.Root.Background = (Brush)Application.Current.Resources["GlintPanelBrush"];
         pane.Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         pane.Root.RowDefinitions.Add(new RowDefinition());
         pane.Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        pane.Root.BorderThickness = new Thickness(1.5);
+        pane.Root.BorderThickness = new Thickness(1);
         pane.Root.CornerRadius = new CornerRadius(6);
         pane.ComposerHost.Padding = new Thickness(6, 4, 6, 6);
         Grid.SetRow(pane.ComposerHost, 2);
@@ -519,7 +519,11 @@ public sealed partial class MainWindow
             SetChatRecipient(tab);
             ChatInput.Focus(FocusState.Programmatic);
         }), true);
-        var header = new Grid { Padding = new Thickness(6, 2, 6, 2) };
+        var header = new Grid
+        {
+            Padding = new Thickness(6, 2, 6, 2), BorderThickness = new Thickness(0, 0, 0, 1),
+            BorderBrush = (Brush)Application.Current.Resources["GlintPanelBorderBrush"],
+        };
         header.ColumnDefinitions.Add(new ColumnDefinition());
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         pane.Recipient.Content = $"Chat: {tab.Entry.DisplayName}";
@@ -574,17 +578,17 @@ public sealed partial class MainWindow
         else SetViewChannel(Chat, _active?.Replay ?? _active?.Chat);
     }
 
-    void ToggleMultiviewPin(ChannelTab tab)
-    {
-        if (S.MultiviewPinnedChats.Contains(tab.Login)) S.MultiviewPinnedChats.Remove(tab.Login);
-        else if (S.MultiviewPinnedChats.Count < 4) S.MultiviewPinnedChats.Add(tab.Login);
-        S.MultiviewChats = S.MultiviewPinnedChats.Count > 0 ? "Pinned chats" : "Following chat";
-        _multiviewUpdating = true;
-        MultiviewChatMode.SelectedItem = S.MultiviewChats;
-        _multiviewUpdating = false;
-        Settings.Save();
-        ApplyMultiviewLayout();
-    }
+    // Which chats multiview shows. The saved values stay as they were; these are the words people see.
+    internal static readonly (string Value, string Label)[] ChatModes =
+    [
+        ("Each stream", "Every stream"),
+        ("Following chat", "The stream you're on"),
+        ("Pinned chats", "Only the ones you choose"),
+        ("Hidden", "None"),
+    ];
+
+    internal static string ChatModeLabel(string value) => ChatModes.FirstOrDefault(m => m.Value == value).Label ?? ChatModes[0].Label;
+    internal static string ChatModeValue(string? label) => ChatModes.FirstOrDefault(m => m.Label == label).Value ?? ChatModes[0].Value;
 
     // The chat button (and each chat's close button) shows or hides just that stream's chat.
     void ToggleMultiviewChat(ChannelTab tab)
@@ -599,19 +603,25 @@ public sealed partial class MainWindow
         S.MultiviewPinnedChats = shown.Skip(Math.Max(0, shown.Count - 4)).ToList();
         S.MultiviewChats = shown.Count > 0 ? "Pinned chats" : "Hidden";
         _multiviewUpdating = true;
-        MultiviewChatMode.SelectedItem = S.MultiviewChats;
+        MultiviewChatMode.SelectedItem = ChatModeLabel(S.MultiviewChats);
         _multiviewUpdating = false;
     }
 
+    // A tick per stream in the grid; the same switch as the chat button on each video.
     void ShowMultiviewPins()
     {
         var menu = new MenuFlyout();
         TrackVideoPopup(menu);
-        foreach (var tab in _tabs)
+        var shown = MultiviewChatTabs();
+        foreach (var tab in _multiviewSlots.Select(s => s.Tab).OfType<ChannelTab>().Distinct())
         {
-            var item = new ToggleMenuFlyoutItem { Text = tab.Entry.DisplayName, IsChecked = S.MultiviewPinnedChats.Contains(tab.Login) };
-            item.IsEnabled = item.IsChecked || S.MultiviewPinnedChats.Count < 4;
-            item.Click += (_, _) => ToggleMultiviewPin(tab);
+            var item = new ToggleMenuFlyoutItem { Text = tab.Entry.DisplayName, IsChecked = shown.Contains(tab) };
+            item.Click += (_, _) =>
+            {
+                ToggleMultiviewChat(tab);
+                Settings.Save();
+                ApplyLayoutSettings();
+            };
             menu.Items.Add(item);
         }
         menu.ShowAt(MultiviewPins);

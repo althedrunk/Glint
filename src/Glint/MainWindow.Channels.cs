@@ -24,7 +24,11 @@ sealed class ChannelTab
     public TabViewItem Item { get; set; } = null!;
     public TabPlayback Playback { get; } = new();
     public bool PoppedOut { get; set; } // playing in the mini player
-    public TextBlock HeaderText { get; } = new() { TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+    public TextBlock HeaderText { get; } = new()
+    {
+        FontSize = 12, MaxWidth = 108, TextTrimming = TextTrimming.CharacterEllipsis,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
     public Button AudioButton { get; } = new();
     public ImageBrush AvatarBrush { get; } = new() { Stretch = Stretch.UniformToFill };
     public Ellipse LiveDot { get; } = new()
@@ -39,6 +43,10 @@ sealed class ChannelTab
     // VOD state. Vod == null means we're watching live.
     public VideoInfo? Vod { get; set; }
     public double VodPosition { get; set; }
+    // Parts of the VOD Twitch muted for copyrighted audio.
+    public List<(double Start, double End)> MutedRanges { get; set; } = new();
+    // Where the game changes, for the chapter list and the ticks on the seek bar.
+    public List<VodChapter> Chapters { get; set; } = new();
     public ChatChannel? Replay { get; set; }
     public VodReplay? ReplayEngine { get; set; }
     // Channel page lists by kind ("ARCHIVE", "HIGHLIGHT", "CLIPS:LAST_WEEK" ...), refetched after a few minutes.
@@ -57,18 +65,20 @@ public sealed partial class MainWindow
         return e;
     }
 
-    bool _refreshingLive;
+    readonly SemaphoreSlim _liveRefreshGate = new(1, 1);
 
-    async Task RefreshLiveAsync(bool openTabsOnly = false)
+    async Task RefreshLiveAsync(bool openTabsOnly = false, bool waitForCurrent = false)
     {
-        if (_closing || _refreshingLive) return;
-        var logins = (openTabsOnly ? Enumerable.Empty<string>() : _entries.Values.Where(e => e.IsFavorite || e.IsFollowed).Select(e => e.Login)
-                .Concat(S.RecentChannels.Take(HomeRecentCount)))
-            .Concat(_tabs.Select(t => t.Login)).Distinct().ToList();
-        if (logins.Count == 0) return;
-        _refreshingLive = true;
+        if (_closing) return;
+        if (waitForCurrent) await _liveRefreshGate.WaitAsync();
+        else if (!_liveRefreshGate.Wait(0)) return;
         try
         {
+            if (_closing) return;
+            var logins = (openTabsOnly ? Enumerable.Empty<string>() : _entries.Values.Where(e => e.IsFavorite || e.IsFollowed).Select(e => e.Login)
+                    .Concat(S.RecentChannels.Take(HomeRecentCount)))
+                .Concat(_tabs.Select(t => t.Login)).Distinct().ToList();
+            if (logins.Count == 0) return;
             var infos = await TwitchGql.GetUsersAsync(logins);
             if (_closing) return;
             foreach (var info in infos)
@@ -89,7 +99,8 @@ public sealed partial class MainWindow
             UpdateInfoBar();
             UpdateHome();
         }
-        finally { _refreshingLive = false; }
+        catch (OperationCanceledException) { Log.Error("Channel refresh timed out"); }
+        finally { _liveRefreshGate.Release(); }
     }
 
     void RebuildSidebar()
@@ -283,6 +294,7 @@ public sealed partial class MainWindow
             if (emotes.Count > before)
             {
                 tab.Chat.AddSystem($"Loaded {emotes.Count - before} more emotes");
+                tab.Chat.RefreshEmotes();
                 QueueEmoteSuggestions();
             }
             if (!emotes.Incomplete) return;
@@ -317,6 +329,7 @@ public sealed partial class MainWindow
         bool active = tab == _active;
         bool recipient = tab == ChatTarget;
         SaveChatDraft();
+        RememberVodPosition(tab, now: true);
         if (active)
         {
             _active = null;
@@ -356,7 +369,7 @@ public sealed partial class MainWindow
 
     void SaveTabs()
     {
-        if (_changingTabs) return;
+        if (_changingTabs || _deferredTabs != null) return; // tabs still waiting to reopen after a background start
         S.OpenTabs = Tabs.TabItems.OfType<TabViewItem>().Select(t => t.Tag).OfType<ChannelTab>().Select(t => t.Login).ToList();
         S.ActiveTab = _active?.Login;
         Settings.Save();
@@ -365,7 +378,7 @@ public sealed partial class MainWindow
     void OpenNewTab()
     {
         CloseBrowse();
-        var item = new TabViewItem { Header = "New tab", IconSource = new FontIconSource { Glyph = "" } }; // a new tab shows the home page
+        var item = new TabViewItem { Header = "New tab", IconSource = new FontIconSource { FontFamily = (FontFamily)Application.Current.Resources["GlintIconFont"], Glyph = "" } }; // a new tab shows the home page
         AutomationProperties.SetName(item, "New tab");
         Tabs.TabItems.Add(item);
         Tabs.SelectedItem = item;
@@ -447,8 +460,9 @@ public sealed partial class MainWindow
         InfoAvatar.ImageSource = e.Avatar;
         bool live = e.IsLive && tab.Vod == null;
         LiveBadge.Visibility = InfoLiveRing.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        InfoBar.BorderBrush = (Brush)Application.Current.Resources[live ? "GlintAccentBrush" : "GlintPanelBorderBrush"];
         InfoTitle.Text = tab.Vod?.Title ?? e.Stream?.Title ?? "Offline";
-        ChatHeader.Text = tab.Vod != null ? "Chat replay" : "Chat";
+        ChatHeader.Text = tab.Vod != null ? "CHAT REPLAY" : "CHAT";
         UpdateInfoMeta();
         UpdateOverlayState();
     }
@@ -459,12 +473,14 @@ public sealed partial class MainWindow
         if (_active is not { } tab) return;
         if (tab.Vod is { } v)
         {
-            InfoMeta.Text = Join(v.CreatedAt.LocalDateTime.ToString("d MMM yyyy"), $"{v.Views:N0} views", v.Game);
+            InfoMeta.Text = Join(v.CreatedAt.LocalDateTime.ToString("d MMM yyyy"), $"{v.Views:N0} views");
+            InfoGame.Text = string.IsNullOrWhiteSpace(v.Game) ? "" : $"  ·  {v.Game}";
             return;
         }
         if (tab.Entry.Stream is not { } s)
         {
             InfoMeta.Text = "";
+            InfoGame.Text = "";
             _overlay.StatusText.Text = "";
             return;
         }
@@ -473,8 +489,8 @@ public sealed partial class MainWindow
             tab.Playback.AdStatus == AdSkipStatus.AlternateStream ? "Alternate stream during ads" : null;
         _overlay.StatusText.Text = Join(adStatus, $"{s.Viewers:N0} viewers",
             up > TimeSpan.Zero && up < TimeSpan.FromDays(7) ? $"{(int)up.TotalHours}:{up.Minutes:00}:{up.Seconds:00}" : null);
+        InfoGame.Text = string.IsNullOrWhiteSpace(s.Game) ? "" : $"  ·  {s.Game}";
         InfoMeta.Text = Join(
-            s.Game,
             $"{s.Viewers:N0} viewers",
             up > TimeSpan.Zero && up < TimeSpan.FromDays(7) ? $"{(int)up.TotalHours}:{up.Minutes:00}:{up.Seconds:00}" : null,
             adStatus ?? (_playerState == PlayerState.Buffering ? "buffering" : null));
