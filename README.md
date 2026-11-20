@@ -45,11 +45,11 @@ Watching and reading chat work without an account. Sign in with Twitch for sendi
 
 ## Demo screenshots
 
-The Broadcast interface in single view and multiview, shown with fictional channels, chat and placeholder video.
+Glint in single view and multiview, shown with fictional channels and chat.
 
 ![Glint in single view with player controls, channel tabs and chat](docs/screenshots/single-view.png)
 
-![Glint multiview with two players and a separate chat below each](docs/screenshots/multiview.png)
+![Glint multiview with a main stream, two smaller streams and chat on the right](docs/screenshots/multiview.png)
 
 ## Install from source
 
